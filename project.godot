@@ -11,8 +11,24 @@ config_version=5
 [application]
 
 config/name="class_little_game"
+run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+DataStore="*res://scripts/data_store.gd"
+SoundManager="*res://scripts/sound_manager.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/stretch/mode="canvas_items"
+
+[gui]
+
+theme/custom_font="res://theme/ui_font.tres"
 
 [rendering]
 
