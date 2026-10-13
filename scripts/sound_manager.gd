@@ -70,6 +70,11 @@ func is_muted() -> bool:
 	return muted
 
 
+## 重新从存档读取设置（重置存档后同步运行时状态用）。
+func reload_settings() -> void:
+	_load_settings()
+
+
 func set_muted(value: bool) -> void:
 	if value == muted:
 		return

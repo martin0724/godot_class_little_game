@@ -40,6 +40,8 @@ var _names: Array[String] = []   ## 当前玩家名称（可编辑）
 var _scores: Array[int] = []     ## 本局起始分数（从存档恢复）
 var _game_over := false
 var _mute_button: Button
+var _reset_button: Button
+var _reset_dialog: Control
 var _overlay: Control
 
 
@@ -143,8 +145,18 @@ func _build_dashboard() -> void:
 		_panels.append(panel)
 
 
-## 顶部 HUD：右上角的全局静音开关。
+## 顶部 HUD：右上角的「重置存档」与「全局静音」开关。
 func _build_hud() -> void:
+	_reset_button = Button.new()
+	_reset_button.focus_mode = Control.FOCUS_NONE
+	_reset_button.text = "重置存档"
+	_reset_button.position = Vector2(VIEW_W - 268.0, 16.0)
+	_reset_button.size = Vector2(104.0, 38.0)
+	_reset_button.add_theme_font_size_override("font_size", 15)
+	_style_hud_button(_reset_button, true)
+	_reset_button.pressed.connect(_on_reset_pressed)
+	add_child(_reset_button)
+
 	_mute_button = Button.new()
 	_mute_button.toggle_mode = true
 	_mute_button.focus_mode = Control.FOCUS_NONE
@@ -158,27 +170,33 @@ func _build_hud() -> void:
 	add_child(_mute_button)
 
 
-func _style_hud_button(btn: Button) -> void:
+func _style_hud_button(btn: Button, danger: bool = false) -> void:
 	btn.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0))
 	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1))
 	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1))
+
+	var accent := Color(0.95, 0.45, 0.42, 0.80) if danger else Color(0.45, 0.70, 0.95, 0.60)
 
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.06, 0.16, 0.28, 0.78)
 	normal.set_corner_radius_all(10)
 	normal.set_border_width_all(2)
-	normal.border_color = Color(0.45, 0.70, 0.95, 0.6)
+	normal.border_color = accent
 	normal.set_content_margin_all(6)
 	btn.add_theme_stylebox_override("normal", normal)
 
 	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color(0.10, 0.24, 0.40, 0.92)
+	hover.bg_color = Color(0.32, 0.13, 0.15, 0.92) if danger else Color(0.10, 0.24, 0.40, 0.92)
+	hover.border_color = accent.lightened(0.25)
 	btn.add_theme_stylebox_override("hover", hover)
 
-	# 按下态（已静音）用红色提示
 	var pressed: StyleBoxFlat = normal.duplicate()
-	pressed.bg_color = Color(0.55, 0.25, 0.28, 0.95)
-	pressed.border_color = Color(1.0, 0.55, 0.50, 0.9)
+	if danger:
+		pressed.bg_color = Color(0.48, 0.17, 0.18, 0.95)
+	else:
+		# 静音按钮的按下态 = “已静音”，用红色提示
+		pressed.bg_color = Color(0.55, 0.25, 0.28, 0.95)
+		pressed.border_color = Color(1.0, 0.55, 0.50, 0.9)
 	btn.add_theme_stylebox_override("pressed", pressed)
 
 
@@ -189,6 +207,94 @@ func _update_mute_text() -> void:
 func _on_mute_toggled(pressed: bool) -> void:
 	SoundManager.set_muted(pressed)
 	_update_mute_text()
+
+
+# ——————————————————— 重置存档与配置 ———————————————————
+
+func _on_reset_pressed() -> void:
+	_show_reset_confirm()
+
+
+func _show_reset_confirm() -> void:
+	if _reset_dialog:
+		return
+
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.55)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_reset_dialog = overlay
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	var card := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.13, 0.24, 0.98)
+	style.set_corner_radius_all(18)
+	style.set_border_width_all(3)
+	style.border_color = Color(0.95, 0.45, 0.42)
+	style.set_content_margin_all(26)
+	card.add_theme_stylebox_override("panel", style)
+	center.add_child(card)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 14)
+	card.add_child(vb)
+
+	var title := Label.new()
+	title.text = "重置存档与配置"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(1.0, 0.62, 0.58))
+	vb.add_child(title)
+
+	var msg := Label.new()
+	msg.text = "将清空玩家名称、分数、胜场等全部存档数据，\n并把各项配置恢复默认（音效开启、静音关闭）。\n此操作不可撤销。"
+	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg.add_theme_font_size_override("font_size", 15)
+	msg.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0, 0.9))
+	vb.add_child(msg)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	vb.add_child(row)
+
+	var cancel := Button.new()
+	cancel.text = "取消"
+	cancel.custom_minimum_size = Vector2(130, 46)
+	cancel.add_theme_font_size_override("font_size", 17)
+	cancel.pressed.connect(_close_reset_confirm)
+	row.add_child(cancel)
+
+	var confirm := Button.new()
+	confirm.text = "确认重置"
+	confirm.custom_minimum_size = Vector2(130, 46)
+	confirm.add_theme_font_size_override("font_size", 17)
+	confirm.pressed.connect(_do_reset)
+	row.add_child(confirm)
+
+
+func _close_reset_confirm() -> void:
+	if _reset_dialog:
+		_reset_dialog.queue_free()
+		_reset_dialog = null
+
+
+## 完整入口：清空存档并重建场景。
+func _do_reset() -> void:
+	_close_reset_confirm()
+	perform_reset()
+	get_tree().reload_current_scene()
+
+
+## 清空 JSON 存档（含配置）并同步运行时状态（不重建场景）。
+func perform_reset() -> void:
+	DataStore.reset_all()
+	SoundManager.reload_settings()
 
 
 ## 玩家改名：清洗后回写，保证名称非空且不超长。
