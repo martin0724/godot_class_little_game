@@ -17,6 +17,7 @@ const LOCALE_NAMES := {
 
 ## 字符串表：KEY -> { "zh": ..., "en": ... }
 const STRINGS := {
+	# —— 通用 ——
 	"GAME_TITLE": {
 		"zh": "潜艇大作战  ·  Submarine Race",
 		"en": "Submarine Race",
@@ -24,22 +25,6 @@ const STRINGS := {
 	"FINISH_LINE": {
 		"zh": "终 点 线",
 		"en": "F I N I S H",
-	},
-	"BTN_SOUND_ON": {
-		"zh": "音效：开",
-		"en": "Sound: On",
-	},
-	"BTN_SOUND_OFF": {
-		"zh": "音效：关",
-		"en": "Sound: Off",
-	},
-	"BTN_RESET": {
-		"zh": "重置存档",
-		"en": "Reset Data",
-	},
-	"BTN_PLAY_AGAIN": {
-		"zh": "再来一局",
-		"en": "Play Again",
 	},
 	"BTN_CANCEL": {
 		"zh": "取消",
@@ -49,6 +34,88 @@ const STRINGS := {
 		"zh": "确认重置",
 		"en": "Confirm",
 	},
+
+	# —— 音效 / 语言 ——
+	"BTN_SOUND_ON": {
+		"zh": "音效：开",
+		"en": "Sound: On",
+	},
+	"BTN_SOUND_OFF": {
+		"zh": "音效：关",
+		"en": "Sound: Off",
+	},
+
+	# —— 存档选择场景 ——
+	"SAVE_SELECT_TITLE": {
+		"zh": "潜艇大作战  ·  选择存档",
+		"en": "Submarine Race  ·  Select Save",
+	},
+	"NEW_SAVE_TITLE": {
+		"zh": "新建存档",
+		"en": "New Save",
+	},
+	"SAVE_LIST_TITLE": {
+		"zh": "存档列表",
+		"en": "Save List",
+	},
+	"SAVE_NAME_LABEL": {
+		"zh": "存档名称",
+		"en": "Save Name",
+	},
+	"SAVE_NAME_PLACEHOLDER": {
+		"zh": "存档 %d",
+		"en": "Save %d",
+	},
+	"PLAYER_COUNT_LABEL": {
+		"zh": "玩家数量",
+		"en": "Players",
+	},
+	"TARGET_SCORE_LABEL": {
+		"zh": "终点分数",
+		"en": "Target Score",
+	},
+	"BTN_CREATE_START": {
+		"zh": "创建并开始",
+		"en": "Create & Start",
+	},
+	"BTN_ENTER": {
+		"zh": "进入",
+		"en": "Enter",
+	},
+	"BTN_DELETE": {
+		"zh": "删除",
+		"en": "Delete",
+	},
+	"NO_SAVES": {
+		"zh": "还没有存档，先在左侧创建一个吧。",
+		"en": "No saves yet — create one on the left.",
+	},
+	"SLOT_META": {
+		"zh": "%d 名玩家 · 终点 %d 分 · 已进行 %d 局",
+		"en": "%d players · target %d · %d matches",
+	},
+	"SLOT_UPDATED": {
+		"zh": "上次更新：%s",
+		"en": "Updated: %s",
+	},
+	"DELETE_SLOT_TITLE": {
+		"zh": "删除存档",
+		"en": "Delete Save",
+	},
+	"DELETE_SLOT_BODY": {
+		"zh": "确定要删除存档「%s」吗？\n此操作不可撤销。",
+		"en": "Delete save \"%s\"?\nThis cannot be undone.",
+	},
+	"CLEAR_ALL_TITLE": {
+		"zh": "清空全部数据",
+		"en": "Clear All Data",
+	},
+	"CLEAR_ALL_BODY": {
+		"zh": "将删除所有存档并恢复默认配置（音效开启、静音关闭、语言英文）。\n此操作不可撤销。",
+		"en": "Deletes every save and restores default settings (sound on, mute off, language English).\nThis cannot be undone.",
+	},
+
+	# —— 游戏内 ——
 	"NAME_PLACEHOLDER": {
 		"zh": "玩家名",
 		"en": "Name",
@@ -60,6 +127,22 @@ const STRINGS := {
 	"STATUS_WINS": {
 		"zh": "胜%d",
 		"en": "W%d",
+	},
+	"BTN_RESET_SLOT": {
+		"zh": "重置",
+		"en": "Reset",
+	},
+	"RESET_SLOT_TITLE": {
+		"zh": "重置当前存档",
+		"en": "Reset Current Save",
+	},
+	"RESET_SLOT_BODY": {
+		"zh": "将清空当前存档的玩家名称、分数与胜场。\n此操作不可撤销。",
+		"en": "Clears player names, scores and wins of the current save.\nThis cannot be undone.",
+	},
+	"BTN_BACK_TO_SAVES": {
+		"zh": "存档",
+		"en": "Saves",
 	},
 	"WIN_TITLE": {
 		"zh": "%s  获胜！",
@@ -73,13 +156,9 @@ const STRINGS := {
 		"zh": "累计胜场 %d ｜ 已完成对局 %d",
 		"en": "Total wins %d  |  Matches %d",
 	},
-	"RESET_TITLE": {
-		"zh": "重置存档与配置",
-		"en": "Reset Save & Settings",
-	},
-	"RESET_BODY": {
-		"zh": "将清空玩家名称、分数、胜场等全部存档数据，\n并把各项配置恢复默认（音效开启、静音关闭、语言英文）。\n此操作不可撤销。",
-		"en": "This clears all saved data (names, scores, wins)\nand restores default settings (sound on, mute off, language English).\nThis cannot be undone.",
+	"BTN_PLAY_AGAIN": {
+		"zh": "再来一局",
+		"en": "Play Again",
 	},
 }
 

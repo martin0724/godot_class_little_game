@@ -1,31 +1,19 @@
 extends Control
 ## 潜艇大作战 / Submarine Race —— 主控制器。
-## 负责搭建赛道（8 条垂直航道 × 20 格）、潜水艇、底部操作面板，
+## 负责搭建赛道（N 条垂直航道 × M 格）、潜水艇、底部操作面板，
 ## 并处理加减分、获胜结算等游戏逻辑。
+## 玩家数量与终点分数来自当前存档（在存档选择场景中创建）。
 
-const RACER_COUNT := 8    ## 潜水艇数量
-const MAX_SCORE := 20     ## 到达 20 格（水面）获胜
+const UiStyle := preload("res://scripts/ui_style.gd")
 
 # —— 设计分辨率坐标系（配合项目 stretch=canvas_items / aspect=keep）——
 const VIEW_W := 1280.0
 const VIEW_H := 800.0
 const SKY_H := 75.0       ## 天空 / 水面高度，同时也是 FINISH 终点线位置
 const PANEL_TOP := 620.0  ## 底部操作面板起始 y
-const GRID_H := 26.0      ## 每格高度
 const GRID_ZERO_Y := 595.0  ## 0 分（水底）时潜水艇中心 y
 const SIDE_MARGIN := 20.0
-
-## 彩虹配色
-const RACER_COLORS: Array[Color] = [
-	Color(0.906, 0.298, 0.235),  # 红
-	Color(0.902, 0.494, 0.133),  # 橙
-	Color(0.945, 0.769, 0.059),  # 黄
-	Color(0.180, 0.800, 0.443),  # 绿
-	Color(0.102, 0.737, 0.612),  # 青
-	Color(0.204, 0.596, 0.859),  # 蓝
-	Color(0.608, 0.349, 0.714),  # 紫
-	Color(0.910, 0.263, 0.576),  # 粉
-]
+const PANEL_MIN_W := 118.0  ## 单个玩家面板的最小宽度（超出则横向滚动）
 
 const NAME_MAX_LEN := 12
 
@@ -35,7 +23,11 @@ const HUD_H := 38.0
 const HUD_GAP := 8.0
 const HUD_SOUND_W := 136.0
 const HUD_LANG_W := 100.0
-const HUD_RESET_W := 110.0
+const HUD_RESET_W := 96.0
+const HUD_BACK_W := 96.0
+
+var _racer_count := 8   ## 来自当前存档
+var _max_score := 20    ## 来自当前存档
 
 var _submarines: Array[Submarine] = []
 var _panels: Array[ControlPanel] = []
@@ -44,15 +36,23 @@ var _scores: Array[int] = []     ## 本局起始分数（从存档恢复）
 var _game_over := false
 var _winner_index := -1
 var _title_label: Label
+var _slot_label: Label
 var _finish_label: Label
 var _mute_button: Button
 var _reset_button: Button
 var _lang_button: Button
+var _back_button: Button
 var _reset_dialog: Control
 var _overlay: Control
 
 
 func _ready() -> void:
+	if not DataStore.has_active_slot():
+		_go_to_save_select()
+		return
+	_racer_count = maxi(1, DataStore.get_active_player_count())
+	_max_score = maxi(1, DataStore.get_active_max_score())
+
 	I18n.locale_changed.connect(_on_locale_changed)
 	_load_players()
 	_build_world()
@@ -61,31 +61,41 @@ func _ready() -> void:
 	queue_redraw()
 
 
+func _go_to_save_select() -> void:
+	get_tree().change_scene_to_file("res://scenes/save_select.tscn")
+
+
 ## 当前语言下的默认玩家名（未自定义名称时显示）。
 func _default_name(index: int) -> String:
 	return I18n.t("PLAYER_NAME", [index + 1])
 
 
-## 从 JSON 存档载入玩家名称与分数。
+## 彩虹配色：按玩家数量均匀取色相，支持任意人数。
+func _racer_color(index: int) -> Color:
+	var count := maxi(1, _racer_count)
+	return Color.from_hsv(fmod(float(index) / float(count) + 0.02, 1.0), 0.72, 0.95)
+
+
+## 从当前存档载入玩家名称与分数。
 ## 若上一局已分出胜负（有人到达水面），自动开新一局（分数清零）。
 func _load_players() -> void:
-	var use_save := DataStore.get_player_count() == RACER_COUNT
+	var use_save := DataStore.get_player_count() == _racer_count
 	if use_save:
-		for i in RACER_COUNT:
-			if DataStore.get_player_score(i) >= MAX_SCORE:
+		for i in _racer_count:
+			if DataStore.get_player_score(i) >= _max_score:
 				DataStore.reset_scores()
 				break
 
 	_names.clear()
 	_scores.clear()
-	for i in RACER_COUNT:
+	for i in _racer_count:
 		var player_name := _default_name(i)
 		var player_score := 0
 		if use_save:
 			var loaded := DataStore.get_player_name(i)
 			if not loaded.is_empty():
 				player_name = loaded
-			player_score = clampi(DataStore.get_player_score(i), 0, MAX_SCORE)
+			player_score = clampi(DataStore.get_player_score(i), 0, _max_score)
 		_names.append(player_name)
 		_scores.append(player_score)
 
@@ -93,24 +103,29 @@ func _load_players() -> void:
 # ——————————————————— 布局计算 ———————————————————
 
 func _lane_width() -> float:
-	return (VIEW_W - SIDE_MARGIN * 2.0) / float(RACER_COUNT)
+	return (VIEW_W - SIDE_MARGIN * 2.0) / float(maxi(1, _racer_count))
 
 
 func _lane_center_x(index: int) -> float:
 	return SIDE_MARGIN + _lane_width() * (float(index) + 0.5)
 
 
-## 第 score 格对应的 y 坐标（0 格在水底，20 格在水面）。
+## 每格高度：把水面到水底的高度均分给 _max_score 格。
+func _grid_h() -> float:
+	return (GRID_ZERO_Y - SKY_H) / float(maxi(1, _max_score))
+
+
+## 第 score 格对应的 y 坐标（0 格在水底，_max_score 格在水面）。
 func _grid_y(score: int) -> float:
-	return GRID_ZERO_Y - float(score) * GRID_H
+	return GRID_ZERO_Y - float(score) * _grid_h()
 
 
 # ——————————————————— 场景搭建 ———————————————————
 
 func _build_world() -> void:
-	for i in RACER_COUNT:
+	for i in _racer_count:
 		var sub := Submarine.new()
-		sub.setup(i + 1, RACER_COLORS[i], MAX_SCORE)
+		sub.setup(i + 1, _racer_color(i), _max_score)
 		sub.pet_kind = i
 		sub.home_x = _lane_center_x(i)
 		sub.score = _scores[i]
@@ -127,6 +142,15 @@ func _build_world() -> void:
 	add_child(title)
 	_title_label = title
 
+	_slot_label = Label.new()
+	_slot_label.text = DataStore.get_active_slot_name()
+	_slot_label.position = Vector2(SIDE_MARGIN + 250.0, 12.0)
+	_slot_label.size = Vector2(250.0, 24.0)
+	_slot_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_slot_label.add_theme_font_size_override("font_size", 15)
+	_slot_label.add_theme_color_override("font_color", Color(0.10, 0.28, 0.45, 0.75))
+	add_child(_slot_label)
+
 	var finish := Label.new()
 	finish.text = I18n.t("FINISH_LINE")
 	finish.position = Vector2(VIEW_W * 0.5 - 100.0, SKY_H - 36.0)
@@ -140,16 +164,25 @@ func _build_world() -> void:
 	_finish_label = finish
 
 
+## 底部操作面板：人数较多时自动出现横向滚动条。
 func _build_dashboard() -> void:
-	var bar := HBoxContainer.new()
-	bar.position = Vector2(SIDE_MARGIN, PANEL_TOP + 12.0)
-	bar.size = Vector2(VIEW_W - SIDE_MARGIN * 2.0, VIEW_H - PANEL_TOP - 24.0)
-	bar.add_theme_constant_override("separation", 8)
-	add_child(bar)
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(SIDE_MARGIN, PANEL_TOP + 12.0)
+	scroll.size = Vector2(VIEW_W - SIDE_MARGIN * 2.0, VIEW_H - PANEL_TOP - 24.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(scroll)
 
-	for i in RACER_COUNT:
+	var bar := HBoxContainer.new()
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bar.add_theme_constant_override("separation", 8)
+	scroll.add_child(bar)
+
+	for i in _racer_count:
 		var panel := ControlPanel.new()
-		panel.setup(i, RACER_COLORS[i], _names[i], MAX_SCORE)
+		panel.setup(i, _racer_color(i), _names[i], _max_score)
+		panel.custom_minimum_size = Vector2(PANEL_MIN_W, 0)
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		panel.score_requested.connect(_on_score_requested)
@@ -160,74 +193,43 @@ func _build_dashboard() -> void:
 		_panels.append(panel)
 
 
-## 顶部 HUD：右上角的「语言切换」「重置存档」与「全局静音」开关。
+## 顶部 HUD：右上角的「存档」「重置」「语言」「音效」四个按钮。
 func _build_hud() -> void:
-	var right := VIEW_W - SIDE_MARGIN
-	var sound_x := right - HUD_SOUND_W
+	var sound_x := VIEW_W - SIDE_MARGIN - HUD_SOUND_W
 	var lang_x := sound_x - HUD_GAP - HUD_LANG_W
 	var reset_x := lang_x - HUD_GAP - HUD_RESET_W
+	var back_x := reset_x - HUD_GAP - HUD_BACK_W
 
-	_reset_button = Button.new()
-	_reset_button.focus_mode = Control.FOCUS_NONE
-	_reset_button.text = I18n.t("BTN_RESET")
-	_reset_button.position = Vector2(reset_x, HUD_Y)
-	_reset_button.size = Vector2(HUD_RESET_W, HUD_H)
-	_reset_button.add_theme_font_size_override("font_size", 15)
-	_style_hud_button(_reset_button, true)
+	_back_button = _make_hud_button(I18n.t("BTN_BACK_TO_SAVES"), Vector2(back_x, HUD_Y), HUD_BACK_W)
+	_back_button.pressed.connect(_on_back_pressed)
+	add_child(_back_button)
+
+	_reset_button = _make_hud_button(I18n.t("BTN_RESET_SLOT"), Vector2(reset_x, HUD_Y), HUD_RESET_W, true)
 	_reset_button.pressed.connect(_on_reset_pressed)
 	add_child(_reset_button)
 
-	_lang_button = Button.new()
-	_lang_button.focus_mode = Control.FOCUS_NONE
-	_lang_button.text = I18n.switch_button_text()
-	_lang_button.position = Vector2(lang_x, HUD_Y)
-	_lang_button.size = Vector2(HUD_LANG_W, HUD_H)
-	_lang_button.add_theme_font_size_override("font_size", 15)
-	_style_hud_button(_lang_button, false, Color(0.55, 0.85, 0.65, 0.70))
+	_lang_button = _make_hud_button(I18n.switch_button_text(), Vector2(lang_x, HUD_Y), HUD_LANG_W, false, Color(0.55, 0.85, 0.65, 0.70))
 	_lang_button.pressed.connect(_on_lang_pressed)
 	add_child(_lang_button)
 
-	_mute_button = Button.new()
+	_mute_button = _make_hud_button("", Vector2(sound_x, HUD_Y), HUD_SOUND_W)
 	_mute_button.toggle_mode = true
-	_mute_button.focus_mode = Control.FOCUS_NONE
-	_mute_button.position = Vector2(sound_x, HUD_Y)
-	_mute_button.size = Vector2(HUD_SOUND_W, HUD_H)
 	_mute_button.add_theme_font_size_override("font_size", 16)
-	_style_hud_button(_mute_button)
 	_mute_button.button_pressed = SoundManager.is_muted()
 	_update_mute_text()
 	_mute_button.toggled.connect(_on_mute_toggled)
 	add_child(_mute_button)
 
 
-func _style_hud_button(btn: Button, danger: bool = false, accent_override: Color = Color(0, 0, 0, 0)) -> void:
-	btn.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0))
-	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1))
-	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1))
-
-	var accent := accent_override if accent_override.a > 0.0 else (Color(0.95, 0.45, 0.42, 0.80) if danger else Color(0.45, 0.70, 0.95, 0.60))
-
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.06, 0.16, 0.28, 0.78)
-	normal.set_corner_radius_all(10)
-	normal.set_border_width_all(2)
-	normal.border_color = accent
-	normal.set_content_margin_all(6)
-	btn.add_theme_stylebox_override("normal", normal)
-
-	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color(0.32, 0.13, 0.15, 0.92) if danger else Color(0.10, 0.24, 0.40, 0.92)
-	hover.border_color = accent.lightened(0.25)
-	btn.add_theme_stylebox_override("hover", hover)
-
-	var pressed: StyleBoxFlat = normal.duplicate()
-	if danger:
-		pressed.bg_color = Color(0.48, 0.17, 0.18, 0.95)
-	else:
-		# 静音按钮的按下态 = “已静音”，用红色提示
-		pressed.bg_color = Color(0.55, 0.25, 0.28, 0.95)
-		pressed.border_color = Color(1.0, 0.55, 0.50, 0.9)
-	btn.add_theme_stylebox_override("pressed", pressed)
+func _make_hud_button(text_value: String, pos: Vector2, width: float, danger := false, accent := Color(0, 0, 0, 0)) -> Button:
+	var btn := Button.new()
+	btn.text = text_value
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.position = pos
+	btn.size = Vector2(width, HUD_H)
+	btn.add_theme_font_size_override("font_size", 15)
+	UiStyle.hud_button(btn, danger, accent)
+	return btn
 
 
 func _update_mute_text() -> void:
@@ -239,10 +241,14 @@ func _on_mute_toggled(pressed: bool) -> void:
 	_update_mute_text()
 
 
-# ——————————————————— 语言切换 ———————————————————
+# ——————————————————— 语言切换 / 返回存档 ———————————————————
 
 func _on_lang_pressed() -> void:
 	I18n.toggle()
+
+
+func _on_back_pressed() -> void:
+	_go_to_save_select()
 
 
 func _on_locale_changed(_locale: String) -> void:
@@ -253,10 +259,14 @@ func _on_locale_changed(_locale: String) -> void:
 func _refresh_texts() -> void:
 	if _title_label:
 		_title_label.text = I18n.t("GAME_TITLE")
+	if _slot_label:
+		_slot_label.text = DataStore.get_active_slot_name()
 	if _finish_label:
 		_finish_label.text = I18n.t("FINISH_LINE")
+	if _back_button:
+		_back_button.text = I18n.t("BTN_BACK_TO_SAVES")
 	if _reset_button:
-		_reset_button.text = I18n.t("BTN_RESET")
+		_reset_button.text = I18n.t("BTN_RESET_SLOT")
 	if _lang_button:
 		_lang_button.text = I18n.switch_button_text()
 	if _mute_button:
@@ -279,7 +289,7 @@ func _refresh_texts() -> void:
 		_show_reset_confirm()
 
 
-# ——————————————————— 重置存档与配置 ———————————————————
+# ——————————————————— 重置当前存档 ———————————————————
 
 func _on_reset_pressed() -> void:
 	_show_reset_confirm()
@@ -288,84 +298,32 @@ func _on_reset_pressed() -> void:
 func _show_reset_confirm() -> void:
 	if _reset_dialog:
 		return
-
-	var overlay := ColorRect.new()
-	overlay.color = Color(0, 0, 0, 0.55)
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(overlay)
-	_reset_dialog = overlay
-
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
-
-	var card := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.13, 0.24, 0.98)
-	style.set_corner_radius_all(18)
-	style.set_border_width_all(3)
-	style.border_color = Color(0.95, 0.45, 0.42)
-	style.set_content_margin_all(26)
-	card.add_theme_stylebox_override("panel", style)
-	center.add_child(card)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 14)
-	card.add_child(vb)
-
-	var title := Label.new()
-	title.text = I18n.t("RESET_TITLE")
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", Color(1.0, 0.62, 0.58))
-	vb.add_child(title)
-
-	var msg := Label.new()
-	msg.text = I18n.t("RESET_BODY")
-	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	msg.add_theme_font_size_override("font_size", 15)
-	msg.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0, 0.9))
-	vb.add_child(msg)
-
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 16)
-	vb.add_child(row)
-
-	var cancel := Button.new()
-	cancel.text = I18n.t("BTN_CANCEL")
-	cancel.custom_minimum_size = Vector2(130, 46)
-	cancel.add_theme_font_size_override("font_size", 17)
-	cancel.pressed.connect(_close_reset_confirm)
-	row.add_child(cancel)
-
-	var confirm := Button.new()
-	confirm.text = I18n.t("BTN_CONFIRM_RESET")
-	confirm.custom_minimum_size = Vector2(130, 46)
-	confirm.add_theme_font_size_override("font_size", 17)
-	confirm.pressed.connect(_do_reset)
-	row.add_child(confirm)
+	_reset_dialog = UiStyle.confirm_dialog(
+		self,
+		I18n.t("RESET_SLOT_TITLE"),
+		I18n.t("RESET_SLOT_BODY"),
+		I18n.t("BTN_CANCEL"),
+		I18n.t("BTN_CONFIRM_RESET"),
+		_do_reset
+	)
 
 
 func _close_reset_confirm() -> void:
-	if _reset_dialog:
+	if _reset_dialog and is_instance_valid(_reset_dialog):
 		_reset_dialog.queue_free()
-		_reset_dialog = null
+	_reset_dialog = null
 
 
-## 完整入口：清空存档并重建场景。
+## 完整入口：清空当前存档并重建场景。
 func _do_reset() -> void:
-	_close_reset_confirm()
+	_reset_dialog = null
 	perform_reset()
 	get_tree().reload_current_scene()
 
 
-## 清空 JSON 存档（含配置）并同步运行时状态（不重建场景）。
+## 清空当前存档的名称 / 分数 / 胜场（不重建场景）。
 func perform_reset() -> void:
-	DataStore.reset_all()
-	SoundManager.reload_settings()
-	I18n.reload_settings()
+	DataStore.reset_active_slot()
 
 
 ## 玩家改名：清洗后回写；留空则回退到当前语言的默认名。
@@ -394,9 +352,9 @@ func _on_score_requested(index: int, delta: int) -> void:
 		return
 	SoundManager.play_click()
 
-	var value := clampi(sub.score + delta, 0, MAX_SCORE)
+	var value := clampi(sub.score + delta, 0, _max_score)
 	if value == sub.score:
-		# 已在边界（水底 0 或水面 20），只做反馈
+		# 已在边界（水底 0 或水面 _max_score），只做反馈
 		SoundManager.play_denied()
 		sub.flash(Color(1, 1, 1, 0.6))
 		return
@@ -416,7 +374,7 @@ func _on_score_requested(index: int, delta: int) -> void:
 	_panels[index].set_score(value)
 	DataStore.set_player_score(index, value)
 
-	if value >= MAX_SCORE:
+	if value >= _max_score:
 		_trigger_win(index)
 
 
@@ -449,13 +407,9 @@ func _show_winner(index: int) -> void:
 	overlay.add_child(center)
 
 	var card := PanelContainer.new()
-	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.05, 0.14, 0.26, 0.98)
-	card_style.set_corner_radius_all(20)
-	card_style.set_border_width_all(3)
-	card_style.border_color = RACER_COLORS[index]
-	card_style.set_content_margin_all(30)
-	card.add_theme_stylebox_override("panel", card_style)
+	card.add_theme_stylebox_override("panel", UiStyle.card_style(
+		Color(0.05, 0.14, 0.26, 0.98), _racer_color(index), 20, 3, 30
+	))
 	center.add_child(card)
 
 	var vb := VBoxContainer.new()
@@ -466,11 +420,11 @@ func _show_winner(index: int) -> void:
 	winner.text = I18n.t("WIN_TITLE", [_names[index]])
 	winner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	winner.add_theme_font_size_override("font_size", 34)
-	winner.add_theme_color_override("font_color", RACER_COLORS[index].lightened(0.4))
+	winner.add_theme_color_override("font_color", _racer_color(index).lightened(0.4))
 	vb.add_child(winner)
 
 	var subtitle := Label.new()
-	subtitle.text = I18n.t("WIN_SUBTITLE", [MAX_SCORE, MAX_SCORE])
+	subtitle.text = I18n.t("WIN_SUBTITLE", [_max_score, _max_score])
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 16)
 	subtitle.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.85))
@@ -497,13 +451,13 @@ func _show_winner(index: int) -> void:
 
 
 func _on_restart_pressed() -> void:
-	if _overlay:
+	if _overlay and is_instance_valid(_overlay):
 		_overlay.queue_free()
-		_overlay = null
+	_overlay = null
 	_reset_game()
 
 
-## 原地重置（不重载场景，保留玩家名称与静音设置）。
+## 原地重置（不重载场景，保留玩家名称与胜场）。
 func _reset_game() -> void:
 	_game_over = false
 	_winner_index = -1
@@ -537,17 +491,17 @@ func _draw() -> void:
 	# 底部操作区底色
 	draw_rect(Rect2(0, PANEL_TOP, VIEW_W, VIEW_H - PANEL_TOP), Color(0.024, 0.078, 0.13))
 
-	# 20 格水平网格线
-	for g in range(0, MAX_SCORE + 1):
+	# 网格线（0 .. _max_score）
+	for g in range(0, _max_score + 1):
 		var y := _grid_y(g)
-		var alpha := 0.22 if g == MAX_SCORE else 0.09
+		var alpha := 0.22 if g == _max_score else 0.09
 		draw_dashed_line(Vector2(SIDE_MARGIN, y), Vector2(VIEW_W - SIDE_MARGIN, y), Color(1, 1, 1, alpha), 1.0, 7.0)
 
 	# 航道分隔线
-	var lw := _lane_width()
-	for i in range(RACER_COUNT + 1):
-		var x := SIDE_MARGIN + lw * float(i)
-		draw_dashed_line(Vector2(x, SKY_H), Vector2(x, GRID_ZERO_Y + GRID_H * 0.7), Color(1, 1, 1, 0.07), 1.0, 12.0)
+	var lane_w := _lane_width()
+	for i in range(_racer_count + 1):
+		var x := SIDE_MARGIN + lane_w * float(i)
+		draw_dashed_line(Vector2(x, SKY_H), Vector2(x, GRID_ZERO_Y + _grid_h() * 0.7), Color(1, 1, 1, 0.07), 1.0, 12.0)
 
 	# FINISH 终点线（水面）
 	draw_dashed_line(Vector2(0, SKY_H), Vector2(VIEW_W, SKY_H), Color(1, 1, 1, 0.95), 3.0, 16.0)
