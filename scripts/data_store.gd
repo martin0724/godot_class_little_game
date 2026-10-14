@@ -30,7 +30,8 @@ func _default_data() -> Dictionary:
 	var players: Array = []
 	for i in RACER_COUNT:
 		players.append({
-			"name": "玩家%d" % (i + 1),
+			# 空字符串 = “尚未自定义”，显示时按当前语言给出默认名
+			"name": "",
 			"score": 0,
 			"wins": 0,
 		})
@@ -41,6 +42,7 @@ func _default_data() -> Dictionary:
 		"last_winner": -1,
 		"settings": {
 			"muted": false,
+			"language": "en",
 		},
 	}
 

@@ -15,6 +15,7 @@ var _plus_button: Button
 var _minus_button: Button
 var _name_edit: LineEdit
 var _wins_label: Label
+var _wins_value: int = 0
 
 
 ## 必须在加入场景树（add_child）之前调用。
@@ -51,7 +52,7 @@ func _ready() -> void:
 	# 可编辑的玩家名称（点击即可修改，回车或失焦生效）
 	_name_edit = LineEdit.new()
 	_name_edit.text = racer_name
-	_name_edit.placeholder_text = "玩家名"
+	_name_edit.placeholder_text = I18n.t("NAME_PLACEHOLDER")
 	_name_edit.max_length = 12
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_name_edit.add_theme_font_size_override("font_size", 15)
@@ -160,10 +161,22 @@ func set_name_text(value: String) -> void:
 
 ## 显示累计胜场数。
 func set_wins(value: int) -> void:
+	_wins_value = value
+	_refresh_wins()
+
+
+## 语言切换后刷新本面板的文案（名称由主场景负责）。
+func refresh_texts() -> void:
+	if _name_edit:
+		_name_edit.placeholder_text = I18n.t("NAME_PLACEHOLDER")
+	_refresh_wins()
+
+
+func _refresh_wins() -> void:
 	if _wins_label == null:
 		return
-	_wins_label.text = "胜%d" % value
-	_wins_label.visible = value > 0
+	_wins_label.text = I18n.t("STATUS_WINS", [_wins_value])
+	_wins_label.visible = _wins_value > 0
 
 
 func _on_name_submitted(_new_text: String) -> void:

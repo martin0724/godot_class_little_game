@@ -27,30 +27,43 @@ const RACER_COLORS: Array[Color] = [
 	Color(0.910, 0.263, 0.576),  # 粉
 ]
 
-const RACER_NAMES: Array[String] = [
-	"玩家1", "玩家2", "玩家3", "玩家4",
-	"玩家5", "玩家6", "玩家7", "玩家8",
-]
-
 const NAME_MAX_LEN := 12
+
+# —— 右上角 HUD 按钮布局 ——
+const HUD_Y := 16.0
+const HUD_H := 38.0
+const HUD_GAP := 8.0
+const HUD_SOUND_W := 136.0
+const HUD_LANG_W := 100.0
+const HUD_RESET_W := 110.0
 
 var _submarines: Array[Submarine] = []
 var _panels: Array[ControlPanel] = []
 var _names: Array[String] = []   ## 当前玩家名称（可编辑）
 var _scores: Array[int] = []     ## 本局起始分数（从存档恢复）
 var _game_over := false
+var _winner_index := -1
+var _title_label: Label
+var _finish_label: Label
 var _mute_button: Button
 var _reset_button: Button
+var _lang_button: Button
 var _reset_dialog: Control
 var _overlay: Control
 
 
 func _ready() -> void:
+	I18n.locale_changed.connect(_on_locale_changed)
 	_load_players()
 	_build_world()
 	_build_dashboard()
 	_build_hud()
 	queue_redraw()
+
+
+## 当前语言下的默认玩家名（未自定义名称时显示）。
+func _default_name(index: int) -> String:
+	return I18n.t("PLAYER_NAME", [index + 1])
 
 
 ## 从 JSON 存档载入玩家名称与分数。
@@ -66,7 +79,7 @@ func _load_players() -> void:
 	_names.clear()
 	_scores.clear()
 	for i in RACER_COUNT:
-		var player_name := RACER_NAMES[i]
+		var player_name := _default_name(i)
 		var player_score := 0
 		if use_save:
 			var loaded := DataStore.get_player_name(i)
@@ -107,14 +120,15 @@ func _build_world() -> void:
 		_submarines.append(sub)
 
 	var title := Label.new()
-	title.text = "潜艇大作战  ·  Submarine Race"
+	title.text = I18n.t("GAME_TITLE")
 	title.position = Vector2(SIDE_MARGIN, 10)
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_color_override("font_color", Color(0.08, 0.24, 0.4, 0.9))
 	add_child(title)
+	_title_label = title
 
 	var finish := Label.new()
-	finish.text = "F I N I S H"
+	finish.text = I18n.t("FINISH_LINE")
 	finish.position = Vector2(VIEW_W * 0.5 - 100.0, SKY_H - 36.0)
 	finish.size = Vector2(200, 30)
 	finish.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -123,6 +137,7 @@ func _build_world() -> void:
 	finish.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
 	finish.add_theme_constant_override("outline_size", 4)
 	add_child(finish)
+	_finish_label = finish
 
 
 func _build_dashboard() -> void:
@@ -145,23 +160,38 @@ func _build_dashboard() -> void:
 		_panels.append(panel)
 
 
-## 顶部 HUD：右上角的「重置存档」与「全局静音」开关。
+## 顶部 HUD：右上角的「语言切换」「重置存档」与「全局静音」开关。
 func _build_hud() -> void:
+	var right := VIEW_W - SIDE_MARGIN
+	var sound_x := right - HUD_SOUND_W
+	var lang_x := sound_x - HUD_GAP - HUD_LANG_W
+	var reset_x := lang_x - HUD_GAP - HUD_RESET_W
+
 	_reset_button = Button.new()
 	_reset_button.focus_mode = Control.FOCUS_NONE
-	_reset_button.text = "重置存档"
-	_reset_button.position = Vector2(VIEW_W - 268.0, 16.0)
-	_reset_button.size = Vector2(104.0, 38.0)
+	_reset_button.text = I18n.t("BTN_RESET")
+	_reset_button.position = Vector2(reset_x, HUD_Y)
+	_reset_button.size = Vector2(HUD_RESET_W, HUD_H)
 	_reset_button.add_theme_font_size_override("font_size", 15)
 	_style_hud_button(_reset_button, true)
 	_reset_button.pressed.connect(_on_reset_pressed)
 	add_child(_reset_button)
 
+	_lang_button = Button.new()
+	_lang_button.focus_mode = Control.FOCUS_NONE
+	_lang_button.text = I18n.switch_button_text()
+	_lang_button.position = Vector2(lang_x, HUD_Y)
+	_lang_button.size = Vector2(HUD_LANG_W, HUD_H)
+	_lang_button.add_theme_font_size_override("font_size", 15)
+	_style_hud_button(_lang_button, false, Color(0.55, 0.85, 0.65, 0.70))
+	_lang_button.pressed.connect(_on_lang_pressed)
+	add_child(_lang_button)
+
 	_mute_button = Button.new()
 	_mute_button.toggle_mode = true
 	_mute_button.focus_mode = Control.FOCUS_NONE
-	_mute_button.position = Vector2(VIEW_W - 156.0, 16.0)
-	_mute_button.size = Vector2(136.0, 38.0)
+	_mute_button.position = Vector2(sound_x, HUD_Y)
+	_mute_button.size = Vector2(HUD_SOUND_W, HUD_H)
 	_mute_button.add_theme_font_size_override("font_size", 16)
 	_style_hud_button(_mute_button)
 	_mute_button.button_pressed = SoundManager.is_muted()
@@ -170,12 +200,12 @@ func _build_hud() -> void:
 	add_child(_mute_button)
 
 
-func _style_hud_button(btn: Button, danger: bool = false) -> void:
+func _style_hud_button(btn: Button, danger: bool = false, accent_override: Color = Color(0, 0, 0, 0)) -> void:
 	btn.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0))
 	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1))
 	btn.add_theme_color_override("font_pressed_color", Color(1, 1, 1))
 
-	var accent := Color(0.95, 0.45, 0.42, 0.80) if danger else Color(0.45, 0.70, 0.95, 0.60)
+	var accent := accent_override if accent_override.a > 0.0 else (Color(0.95, 0.45, 0.42, 0.80) if danger else Color(0.45, 0.70, 0.95, 0.60))
 
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.06, 0.16, 0.28, 0.78)
@@ -201,12 +231,52 @@ func _style_hud_button(btn: Button, danger: bool = false) -> void:
 
 
 func _update_mute_text() -> void:
-	_mute_button.text = "音效：关" if _mute_button.button_pressed else "音效：开"
+	_mute_button.text = I18n.t("BTN_SOUND_OFF" if _mute_button.button_pressed else "BTN_SOUND_ON")
 
 
 func _on_mute_toggled(pressed: bool) -> void:
 	SoundManager.set_muted(pressed)
 	_update_mute_text()
+
+
+# ——————————————————— 语言切换 ———————————————————
+
+func _on_lang_pressed() -> void:
+	I18n.toggle()
+
+
+func _on_locale_changed(_locale: String) -> void:
+	_refresh_texts()
+
+
+## 语言切换后就地刷新全部文案（不重建场景，不影响正在进行的一局）。
+func _refresh_texts() -> void:
+	if _title_label:
+		_title_label.text = I18n.t("GAME_TITLE")
+	if _finish_label:
+		_finish_label.text = I18n.t("FINISH_LINE")
+	if _reset_button:
+		_reset_button.text = I18n.t("BTN_RESET")
+	if _lang_button:
+		_lang_button.text = I18n.switch_button_text()
+	if _mute_button:
+		_update_mute_text()
+
+	# 未自定义名称的玩家跟随语言显示默认名
+	for i in _panels.size():
+		if DataStore.get_player_name(i).is_empty():
+			_names[i] = _default_name(i)
+			_panels[i].set_name_text(_names[i])
+		_panels[i].refresh_texts()
+
+	# 已打开的弹窗按新语言重建
+	if _overlay and _winner_index >= 0:
+		_overlay.queue_free()
+		_overlay = null
+		_show_winner(_winner_index)
+	if _reset_dialog:
+		_close_reset_confirm()
+		_show_reset_confirm()
 
 
 # ——————————————————— 重置存档与配置 ———————————————————
@@ -245,14 +315,14 @@ func _show_reset_confirm() -> void:
 	card.add_child(vb)
 
 	var title := Label.new()
-	title.text = "重置存档与配置"
+	title.text = I18n.t("RESET_TITLE")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 24)
 	title.add_theme_color_override("font_color", Color(1.0, 0.62, 0.58))
 	vb.add_child(title)
 
 	var msg := Label.new()
-	msg.text = "将清空玩家名称、分数、胜场等全部存档数据，\n并把各项配置恢复默认（音效开启、静音关闭）。\n此操作不可撤销。"
+	msg.text = I18n.t("RESET_BODY")
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.add_theme_font_size_override("font_size", 15)
 	msg.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0, 0.9))
@@ -264,14 +334,14 @@ func _show_reset_confirm() -> void:
 	vb.add_child(row)
 
 	var cancel := Button.new()
-	cancel.text = "取消"
+	cancel.text = I18n.t("BTN_CANCEL")
 	cancel.custom_minimum_size = Vector2(130, 46)
 	cancel.add_theme_font_size_override("font_size", 17)
 	cancel.pressed.connect(_close_reset_confirm)
 	row.add_child(cancel)
 
 	var confirm := Button.new()
-	confirm.text = "确认重置"
+	confirm.text = I18n.t("BTN_CONFIRM_RESET")
 	confirm.custom_minimum_size = Vector2(130, 46)
 	confirm.add_theme_font_size_override("font_size", 17)
 	confirm.pressed.connect(_do_reset)
@@ -295,18 +365,23 @@ func _do_reset() -> void:
 func perform_reset() -> void:
 	DataStore.reset_all()
 	SoundManager.reload_settings()
+	I18n.reload_settings()
 
 
-## 玩家改名：清洗后回写，保证名称非空且不超长。
+## 玩家改名：清洗后回写；留空则回退到当前语言的默认名。
 func _on_name_changed(index: int, new_name: String) -> void:
 	var final_name := new_name.strip_edges()
-	if final_name.is_empty():
-		final_name = "玩家%d" % (index + 1)
 	if final_name.length() > NAME_MAX_LEN:
 		final_name = final_name.substr(0, NAME_MAX_LEN)
-	_names[index] = final_name
-	_panels[index].set_name_text(final_name)
-	DataStore.set_player_name(index, final_name)
+
+	if final_name.is_empty():
+		# 存空串 = “未自定义”，显示时按语言给出默认名
+		DataStore.set_player_name(index, "")
+		_names[index] = _default_name(index)
+	else:
+		DataStore.set_player_name(index, final_name)
+		_names[index] = final_name
+	_panels[index].set_name_text(_names[index])
 
 
 # ——————————————————— 游戏逻辑 ———————————————————
@@ -347,6 +422,7 @@ func _on_score_requested(index: int, delta: int) -> void:
 
 func _trigger_win(index: int) -> void:
 	_game_over = true
+	_winner_index = index
 	SoundManager.play_win()
 	DataStore.record_win(index)
 	var sub := _submarines[index]
@@ -387,14 +463,14 @@ func _show_winner(index: int) -> void:
 	card.add_child(vb)
 
 	var winner := Label.new()
-	winner.text = "%s  获胜！" % _names[index]
+	winner.text = I18n.t("WIN_TITLE", [_names[index]])
 	winner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	winner.add_theme_font_size_override("font_size", 34)
 	winner.add_theme_color_override("font_color", RACER_COLORS[index].lightened(0.4))
 	vb.add_child(winner)
 
 	var subtitle := Label.new()
-	subtitle.text = "率先抵达水面 · %d / %d" % [MAX_SCORE, MAX_SCORE]
+	subtitle.text = I18n.t("WIN_SUBTITLE", [MAX_SCORE, MAX_SCORE])
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 16)
 	subtitle.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.85))
@@ -402,14 +478,14 @@ func _show_winner(index: int) -> void:
 
 	# 来自 JSON 存档的累计数据
 	var stats := Label.new()
-	stats.text = "累计胜场 %d ｜ 已完成对局 %d" % [DataStore.get_player_wins(index), DataStore.get_matches_played()]
+	stats.text = I18n.t("WIN_STATS", [DataStore.get_player_wins(index), DataStore.get_matches_played()])
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	stats.add_theme_font_size_override("font_size", 14)
 	stats.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45, 0.9))
 	vb.add_child(stats)
 
 	var restart := Button.new()
-	restart.text = "再来一局"
+	restart.text = I18n.t("BTN_PLAY_AGAIN")
 	restart.custom_minimum_size = Vector2(200, 50)
 	restart.add_theme_font_size_override("font_size", 20)
 	restart.pressed.connect(_on_restart_pressed)
@@ -430,6 +506,7 @@ func _on_restart_pressed() -> void:
 ## 原地重置（不重载场景，保留玩家名称与静音设置）。
 func _reset_game() -> void:
 	_game_over = false
+	_winner_index = -1
 	DataStore.reset_scores()
 	for i in _submarines.size():
 		var sub := _submarines[i]
