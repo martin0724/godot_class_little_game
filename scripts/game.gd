@@ -5,6 +5,7 @@ extends Control
 ## 玩家数量与终点分数来自当前存档（在存档选择场景中创建）。
 
 const UiStyle := preload("res://scripts/ui_style.gd")
+const SeaAnimal := preload("res://scripts/sea_animal.gd")
 
 # —— 设计分辨率坐标系（配合项目 stretch=canvas_items / aspect=keep）——
 const VIEW_W := 1280.0
@@ -25,6 +26,14 @@ const HUD_SOUND_W := 136.0
 const HUD_LANG_W := 100.0
 const HUD_RESET_W := 96.0
 const HUD_BACK_W := 96.0
+const HUD_SUMMON_W := 96.0
+
+# —— 海洋动物 ——
+const AMBIENT_COUNT := 9        ## 常驻装饰动物数量
+const MAX_SPECIALS := 3         ## 同时存在的章鱼/鲨鱼上限
+const HIT_RADIUS := 52.0        ## 与潜艇的触碰判定半径
+const SEA_TOP := 120.0          ## 动物活动的海水区域上边界
+const SEA_BOTTOM := 588.0       ## 下边界
 
 var _racer_count := 8   ## 来自当前存档
 var _max_score := 20    ## 来自当前存档
@@ -42,8 +51,13 @@ var _mute_button: Button
 var _reset_button: Button
 var _lang_button: Button
 var _back_button: Button
+var _summon_button: Button
 var _reset_dialog: Control
 var _overlay: Control
+
+var _ambient_layer: Node2D
+var _critter_layer: Node2D
+var _specials: Array = []
 
 
 func _ready() -> void:
@@ -58,6 +72,7 @@ func _ready() -> void:
 	_build_world()
 	_build_dashboard()
 	_build_hud()
+	set_process(true)
 	queue_redraw()
 
 
@@ -123,6 +138,11 @@ func _grid_y(score: int) -> float:
 # ——————————————————— 场景搭建 ———————————————————
 
 func _build_world() -> void:
+	# 装饰动物层：在潜艇之后方
+	_ambient_layer = Node2D.new()
+	_ambient_layer.name = "AmbientAnimals"
+	add_child(_ambient_layer)
+
 	for i in _racer_count:
 		var sub := Submarine.new()
 		sub.setup(i + 1, _racer_color(i), _max_score)
@@ -133,6 +153,13 @@ func _build_world() -> void:
 		sub.set_target_y(_grid_y(_scores[i]))
 		add_child(sub)
 		_submarines.append(sub)
+
+	# 章鱼 / 鲨鱼层：在潜艇之前方，便于表现抓取 / 撕咬
+	_critter_layer = Node2D.new()
+	_critter_layer.name = "SpecialAnimals"
+	add_child(_critter_layer)
+
+	_spawn_ambient_animals()
 
 	var title := Label.new()
 	title.text = I18n.t("GAME_TITLE")
@@ -193,12 +220,17 @@ func _build_dashboard() -> void:
 		_panels.append(panel)
 
 
-## 顶部 HUD：右上角的「存档」「重置」「语言」「音效」四个按钮。
+## 顶部 HUD：右上角的「召唤」「存档」「重置」「语言」「音效」按钮。
 func _build_hud() -> void:
 	var sound_x := VIEW_W - SIDE_MARGIN - HUD_SOUND_W
 	var lang_x := sound_x - HUD_GAP - HUD_LANG_W
 	var reset_x := lang_x - HUD_GAP - HUD_RESET_W
 	var back_x := reset_x - HUD_GAP - HUD_BACK_W
+	var summon_x := back_x - HUD_GAP - HUD_SUMMON_W
+
+	_summon_button = _make_hud_button(I18n.t("BTN_SUMMON"), Vector2(summon_x, HUD_Y), HUD_SUMMON_W, false, Color(0.72, 0.52, 0.96, 0.75))
+	_summon_button.pressed.connect(_on_summon_pressed)
+	add_child(_summon_button)
 
 	_back_button = _make_hud_button(I18n.t("BTN_BACK_TO_SAVES"), Vector2(back_x, HUD_Y), HUD_BACK_W)
 	_back_button.pressed.connect(_on_back_pressed)
@@ -265,6 +297,8 @@ func _refresh_texts() -> void:
 		_finish_label.text = I18n.t("FINISH_LINE")
 	if _back_button:
 		_back_button.text = I18n.t("BTN_BACK_TO_SAVES")
+	if _summon_button:
+		_summon_button.text = I18n.t("BTN_SUMMON")
 	if _reset_button:
 		_reset_button.text = I18n.t("BTN_RESET_SLOT")
 	if _lang_button:
@@ -342,22 +376,150 @@ func _on_name_changed(index: int, new_name: String) -> void:
 	_panels[index].set_name_text(_names[index])
 
 
+# ——————————————————— 海洋动物 ———————————————————
+
+func _sea_bounds() -> Rect2:
+	return Rect2(Vector2(56.0, SEA_TOP), Vector2(VIEW_W - 112.0, SEA_BOTTOM - SEA_TOP))
+
+
+## 常驻装饰动物（小鱼 / 海星）：只在海里随机游动，不触发任何效果。
+func _spawn_ambient_animals() -> void:
+	var bounds := _sea_bounds()
+	for i in AMBIENT_COUNT:
+		var animal: Node2D = SeaAnimal.new()
+		var kind: int = SeaAnimal.Kind.STARFISH if i % 4 == 3 else SeaAnimal.Kind.FISH
+		var speed := randf_range(40.0, 85.0) * (1.0 if randf() < 0.5 else -1.0)
+		animal.setup_ambient(kind, i, Vector2(speed, randf_range(-14.0, 14.0)), bounds)
+		animal.position = Vector2(
+			randf_range(bounds.position.x + 20.0, bounds.position.x + bounds.size.x - 20.0),
+			randf_range(bounds.position.y + 20.0, bounds.position.y + bounds.size.y - 20.0)
+		)
+		_ambient_layer.add_child(animal)
+
+
+func _on_summon_pressed() -> void:
+	if _summon_special():
+		SoundManager.play_click()
+	else:
+		SoundManager.play_denied()
+
+
+## 生成一只章鱼或鲨鱼（仅由「召唤」按钮触发）。
+## forced_kind 传入无效值时按 50% / 50% 随机；生成失败（已达上限）返回 false。
+func _summon_special(forced_kind: int = -1) -> bool:
+	if _game_over or _submarines.is_empty():
+		return false
+	# 清理已经淡出销毁的
+	_specials = _specials.filter(func(a: Variant) -> bool: return is_instance_valid(a))
+	if _specials.size() >= MAX_SPECIALS:
+		return false
+
+	var kind := forced_kind
+	if kind != SeaAnimal.Kind.OCTOPUS and kind != SeaAnimal.Kind.SHARK:
+		kind = SeaAnimal.Kind.OCTOPUS if randi() % 2 == 0 else SeaAnimal.Kind.SHARK
+
+	var bounds := _sea_bounds()
+	var from_left := randf() < 0.5
+	var spawn_y := randf_range(bounds.position.y + 40.0, bounds.position.y + bounds.size.y - 40.0)
+	var target_y: float = _submarines[randi() % _submarines.size()].position.y
+
+	var animal: Node2D = SeaAnimal.new()
+	animal.setup_special(kind, randi(), target_y, bounds)
+	animal.position = Vector2(
+		bounds.position.x - 70.0 if from_left else bounds.position.x + bounds.size.x + 70.0,
+		spawn_y
+	)
+	animal.velocity = Vector2(150.0 if from_left else -150.0, 0.0)
+	_critter_layer.add_child(animal)
+	animal.grab_effect.connect(_on_grab_effect.bind(animal))
+	_specials.append(animal)
+	return true
+
+
+func _process(_delta: float) -> void:
+	if _game_over:
+		return
+	_update_special_targets()
+	_check_animal_collisions()
+
+
+## 让游泳中的章鱼 / 鲨鱼持续朝「水平方向最近的潜艇」高度靠拢，
+## 保证它们最终能碰到潜艇（也避免潜艇升降后目标高度过时）。
+func _update_special_targets() -> void:
+	for animal in _specials:
+		if not is_instance_valid(animal) or not animal.is_swimming():
+			continue
+		# animal 来自无类型数组（Variant），显式声明类型避免无法推导
+		var animal_x: float = animal.position.x
+		var best_dist: float = INF
+		var best_y: float = animal.position.y
+		for sub in _submarines:
+			var dist: float = absf(sub.position.x - animal_x)
+			if dist < best_dist:
+				best_dist = dist
+				best_y = sub.position.y
+		animal.set_target_y(best_y)
+
+
+func _check_animal_collisions() -> void:
+	for animal in _specials:
+		if not is_instance_valid(animal) or not animal.is_swimming():
+			continue
+		for i in _submarines.size():
+			var sub := _submarines[i]
+			if sub.locked:
+				continue
+			if animal.position.distance_to(sub.position) <= HIT_RADIUS:
+				_start_grab(animal, i)
+				break
+
+
+## 章鱼 / 鲨鱼碰到潜艇：进入抓取 / 撕咬状态，延迟后施加分数变化。
+func _start_grab(animal: Node2D, index: int) -> void:
+	var sub := _submarines[index]
+	var is_octopus: bool = animal.kind == SeaAnimal.Kind.OCTOPUS
+	animal.set_meta("target_index", index)
+	animal.start_grab(sub, Vector2(-6.0, 24.0) if is_octopus else Vector2(-30.0, 4.0), 0.12 if is_octopus else 0.32)
+	if is_octopus:
+		SoundManager.play_grab()
+	else:
+		SoundManager.play_bite()
+		sub.flash(Color(1, 0.45, 0.40))
+
+
+func _on_grab_effect(animal: Node) -> void:
+	if not is_instance_valid(animal):
+		return
+	var index: int = int(animal.get_meta("target_index", -1))
+	if index < 0 or index >= _submarines.size():
+		return
+	var delta: int = 1 if animal.kind == SeaAnimal.Kind.OCTOPUS else -1
+	_change_score(index, delta)
+
+
 # ——————————————————— 游戏逻辑 ———————————————————
 
 func _on_score_requested(index: int, delta: int) -> void:
 	if _game_over:
 		return
-	var sub := _submarines[index]
-	if sub.locked:
+	if _submarines[index].locked:
 		return
 	SoundManager.play_click()
+	_change_score(index, delta)
+
+
+## 统一的分数变化：更新位置 / 面板 / 存档，返回是否真的发生变化。
+func _change_score(index: int, delta: int) -> bool:
+	var sub := _submarines[index]
+	if sub.locked:
+		return false
 
 	var value := clampi(sub.score + delta, 0, _max_score)
 	if value == sub.score:
 		# 已在边界（水底 0 或水面 _max_score），只做反馈
 		SoundManager.play_denied()
 		sub.flash(Color(1, 1, 1, 0.6))
-		return
+		return false
 
 	sub.score = value
 	sub.set_target_y(_grid_y(value))
@@ -376,6 +538,7 @@ func _on_score_requested(index: int, delta: int) -> void:
 
 	if value >= _max_score:
 		_trigger_win(index)
+	return true
 
 
 func _trigger_win(index: int) -> void:

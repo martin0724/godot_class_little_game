@@ -144,6 +144,10 @@ const STRINGS := {
 		"zh": "存档",
 		"en": "Saves",
 	},
+	"BTN_SUMMON": {
+		"zh": "召唤",
+		"en": "Summon",
+	},
 	"WIN_TITLE": {
 		"zh": "%s  获胜！",
 		"en": "%s  wins!",

@@ -28,6 +28,10 @@ func _ready() -> void:
 	_add("down", _chirp(0.22, 640.0, 240.0, 0.5, 0.004, 1.5), -3.0)
 	# 边界无效（已在顶端/底端）：低沉短音
 	_add("denied", _chirp(0.12, 200.0, 150.0, 0.45, 0.002, 1.4), -7.0)
+	# 章鱼抓住潜艇：咕涾涾的上滑音
+	_add("grab", _chirp(0.24, 240.0, 900.0, 0.50, 0.004, 1.1), -3.0)
+	# 鲨鱼咬住潜艇：低频噪声“咔嚓”
+	_add("bite", _noise_burst(0.20, 2.6, 1200.0, 1.5), -2.0)
 	# 获胜：四音上行小号
 	_add("win", _fanfare(), -1.0)
 
@@ -58,6 +62,14 @@ func play_down() -> void:
 
 func play_denied() -> void:
 	play("denied")
+
+
+func play_grab() -> void:
+	play("grab")
+
+
+func play_bite() -> void:
+	play("bite")
 
 
 func play_win() -> void:
@@ -117,6 +129,25 @@ func _chirp(duration: float, f0: float, f1: float, amp: float, attack: float = 0
 		var env := pow(1.0 - t, decay_pow)
 		var atk := minf(1.0, float(i) / attack_n)
 		out[i] = sin(phase) * amp * env * atk
+	return out
+
+
+## 低通滤泼的噪声突发（用于“咔嚓 / 拍击”类音效）。
+func _noise_burst(duration: float, amp: float, cutoff: float, decay_pow: float = 2.0) -> PackedFloat32Array:
+	var n := int(duration * MIX_RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	if n <= 0:
+		return out
+	var dt := 1.0 / float(MIX_RATE)
+	var rc := 1.0 / (TAU * maxf(1.0, cutoff))
+	var alpha := dt / (rc + dt)
+	var prev := 0.0
+	for i in n:
+		var t := float(i) / float(n - 1)
+		var white := randf() * 2.0 - 1.0
+		prev += alpha * (white - prev)
+		out[i] = prev * amp * pow(1.0 - t, decay_pow)
 	return out
 
 
