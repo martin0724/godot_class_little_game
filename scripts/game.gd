@@ -6,6 +6,8 @@ extends Control
 
 const UiStyle := preload("res://scripts/ui_style.gd")
 const SeaAnimal := preload("res://scripts/sea_animal.gd")
+const Trophy := preload("res://scripts/trophy.gd")
+const Confetti := preload("res://scripts/confetti.gd")
 
 # —— 设计分辨率坐标系（配合项目 stretch=canvas_items / aspect=keep）——
 const VIEW_W := 1280.0
@@ -17,6 +19,11 @@ const SIDE_MARGIN := 20.0
 const PANEL_MIN_W := 118.0  ## 单个玩家面板的最小宽度（超出则横向滚动）
 
 const NAME_MAX_LEN := 12
+
+# —— 获胜庆祝 ——
+const TROPHY_SIZE := 190.0       ## 大奖杯尺寸
+const CONFETTI_DURATION := 6.0   ## 撒花持续时长
+const CONFETTI_RATE := 30.0      ## 撒花每秒生成张数
 
 # —— 右上角 HUD 按钮布局 ——
 const HUD_Y := 16.0
@@ -544,7 +551,7 @@ func _change_score(index: int, delta: int) -> bool:
 func _trigger_win(index: int) -> void:
 	_game_over = true
 	_winner_index = index
-	SoundManager.play_win()
+	SoundManager.play_victory()
 	DataStore.record_win(index)
 	var sub := _submarines[index]
 	sub.locked = true
@@ -569,11 +576,24 @@ func _show_winner(index: int) -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(center)
 
+	# 大奖杯 + 结算卡片，竖排居中
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_theme_constant_override("separation", 8)
+	center.add_child(column)
+
+	var trophy: Control = Trophy.new()
+	trophy.name = "Trophy"
+	trophy.setup(_racer_color(index))
+	trophy.custom_minimum_size = Vector2(TROPHY_SIZE, TROPHY_SIZE)
+	column.add_child(trophy)
+
 	var card := PanelContainer.new()
+	card.name = "Card"
 	card.add_theme_stylebox_override("panel", UiStyle.card_style(
 		Color(0.05, 0.14, 0.26, 0.98), _racer_color(index), 20, 3, 30
 	))
-	center.add_child(card)
+	column.add_child(card)
 
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 16)
@@ -607,6 +627,12 @@ func _show_winner(index: int) -> void:
 	restart.add_theme_font_size_override("font_size", 20)
 	restart.pressed.connect(_on_restart_pressed)
 	vb.add_child(restart)
+
+	# 撒花：最后加入 → 飘在卡片之上
+	var confetti: Node2D = Confetti.new()
+	confetti.name = "Confetti"
+	overlay.add_child(confetti)
+	confetti.start(CONFETTI_DURATION, CONFETTI_RATE)
 
 	# 淡入
 	var tween := create_tween()

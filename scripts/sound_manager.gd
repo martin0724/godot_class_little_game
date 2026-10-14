@@ -32,8 +32,8 @@ func _ready() -> void:
 	_add("grab", _chirp(0.24, 240.0, 900.0, 0.50, 0.004, 1.1), -3.0)
 	# 鲨鱼咬住潜艇：低频噪声“咔嚓”
 	_add("bite", _noise_burst(0.20, 2.6, 1200.0, 1.5), -2.0)
-	# 获胜：四音上行小号
-	_add("win", _fanfare(), -1.0)
+	# 获胜：上行琶音 + 收尾和弦的庆典号角
+	_add("victory", _victory_fanfare(), -1.0)
 
 	_load_settings()
 
@@ -72,8 +72,8 @@ func play_bite() -> void:
 	play("bite")
 
 
-func play_win() -> void:
-	play("win")
+func play_victory() -> void:
+	play("victory")
 
 
 # ——————————————————— 全局静音 ———————————————————
@@ -151,15 +151,33 @@ func _noise_burst(duration: float, amp: float, cutoff: float, decay_pow: float =
 	return out
 
 
-## 四音上行小号（C5 - E5 - G5 - C6）。
-func _fanfare() -> PackedFloat32Array:
-	var notes := PackedFloat32Array([523.25, 659.25, 783.99, 1046.50])
+## 庆典号角：快速上行琶音 + 收尾的大三和弦。
+func _victory_fanfare() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	for i in notes.size():
-		var is_last := i == notes.size() - 1
-		var dur := 0.45 if is_last else 0.13
-		var decay := 1.0 if is_last else 1.6
-		out.append_array(_chirp(dur, notes[i], notes[i], 0.5, 0.005, decay))
+	for freq in [523.25, 659.25, 783.99, 1046.50]:
+		out.append_array(_chirp(0.09, float(freq), float(freq), 0.42, 0.004, 0.7))
+	out.append_array(_chord([1046.50, 783.99, 659.25], 0.85, 0.42))
+	return out
+
+
+## 多个频率叠加的和弦，带轻微颤音与衰减。
+func _chord(freqs: Array, duration: float, amp: float) -> PackedFloat32Array:
+	var n := int(duration * MIX_RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	if n <= 0:
+		return out
+	var dt := 1.0 / float(MIX_RATE)
+	var attack_n := maxf(1.0, 0.008 * float(MIX_RATE))
+	for i in n:
+		var t := float(i) / float(n - 1)
+		var env := pow(1.0 - t, 1.1)
+		var atk := minf(1.0, float(i) / attack_n)
+		var vibrato := 1.0 + sin(TAU * 5.5 * float(i) * dt) * 0.004
+		var value := 0.0
+		for freq in freqs:
+			value += sin(TAU * float(freq) * vibrato * float(i) * dt)
+		out[i] = value / float(freqs.size()) * amp * env * atk
 	return out
 
 
