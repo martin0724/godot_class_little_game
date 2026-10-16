@@ -153,8 +153,20 @@ const STRINGS := {
 		"en": "%s  wins!",
 	},
 	"WIN_SUBTITLE": {
-		"zh": "率先抵达水面 · %d / %d",
-		"en": "First to the surface · %d / %d",
+		"zh": "抵达终点 · %d / %d",
+		"en": "Reached the finish · %d / %d",
+	},
+	"WIN_RANK": {
+		"zh": "本轮第 %d 名",
+		"en": "Round rank #%d",
+	},
+	"ALL_FINISHED_TITLE": {
+		"zh": "全员抵达终点！",
+		"en": "All players finished!",
+	},
+	"ALL_FINISHED_BODY": {
+		"zh": "本轮结束 · 共 %d 名玩家",
+		"en": "Round over · %d players",
 	},
 	"WIN_STATS": {
 		"zh": "累计胜场 %d ｜ 已完成对局 %d",

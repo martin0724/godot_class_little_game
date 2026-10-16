@@ -151,6 +151,9 @@ func set_score(value: int) -> void:
 func set_buttons_enabled(enabled: bool) -> void:
 	_plus_button.disabled = not enabled
 	_minus_button.disabled = not enabled
+	# 已获胜的玩家面板整体锁定（名称也不允许再改）
+	if _name_edit:
+		_name_edit.editable = enabled
 
 
 ## 由主场景回写（用于清洗后的最终名称）。

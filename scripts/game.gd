@@ -20,10 +20,13 @@ const PANEL_MIN_W := 118.0  ## 单个玩家面板的最小宽度（超出则横�
 
 const NAME_MAX_LEN := 12
 
-# —— 获胜庆祝 ——
-const TROPHY_SIZE := 190.0       ## 大奖杯尺寸
-const CONFETTI_DURATION := 6.0   ## 撒花持续时长
-const CONFETTI_RATE := 30.0      ## 撒花每秒生成张数
+# —— 获胜庆祝（非阻塞，自动淡出，不打断其他玩家）——
+const TROPHY_SIZE := 160.0          ## 大奖杯尺寸
+const CONFETTI_DURATION := 3.0      ## 撒花持续时长
+const CONFETTI_RATE := 34.0         ## 撒花每秒生成张数
+const CELEBRATION_FADE_IN := 0.30   ## 庆祝层淡入
+const CELEBRATION_HOLD := 3.0       ## 庆祝层停留
+const CELEBRATION_FADE_OUT := 0.50  ## 庆祝层淡出
 
 # —— 右上角 HUD 按钮布局 ——
 const HUD_Y := 16.0
@@ -49,8 +52,9 @@ var _submarines: Array[Submarine] = []
 var _panels: Array[ControlPanel] = []
 var _names: Array[String] = []   ## 当前玩家名称（可编辑）
 var _scores: Array[int] = []     ## 本局起始分数（从存档恢复）
-var _game_over := false
-var _winner_index := -1
+var _game_over := false           ## 所有玩家都已到达终点（本轮结束）
+var _winner_index := -1           ## 最近一位获胜者（用于语言切换时重建庆祝层）
+var _win_order: Array[int] = []   ## 本轮获胜顺序
 var _title_label: Label
 var _slot_label: Label
 var _finish_label: Label
@@ -60,7 +64,8 @@ var _lang_button: Button
 var _back_button: Button
 var _summon_button: Button
 var _reset_dialog: Control
-var _overlay: Control
+var _celebration: Control         ## 非阻塞的获胜庆祝层
+var _final_overlay: Control       ## 全员到达终点后的总结层
 
 var _ambient_layer: Node2D
 var _critter_layer: Node2D
@@ -321,10 +326,10 @@ func _refresh_texts() -> void:
 		_panels[i].refresh_texts()
 
 	# 已打开的弹窗按新语言重建
-	if _overlay and _winner_index >= 0:
-		_overlay.queue_free()
-		_overlay = null
-		_show_winner(_winner_index)
+	if _celebration and is_instance_valid(_celebration) and _winner_index >= 0:
+		_show_celebration(_winner_index)
+	if _final_overlay and is_instance_valid(_final_overlay):
+		_show_final_overlay()
 	if _reset_dialog:
 		_close_reset_confirm()
 		_show_reset_confirm()
@@ -548,38 +553,72 @@ func _change_score(index: int, delta: int) -> bool:
 	return true
 
 
+## 玩家到达终点分：只锁定该玩家（不能再加减分），不结束游戏，其他人继续玩。
 func _trigger_win(index: int) -> void:
-	_game_over = true
 	_winner_index = index
+	if not _win_order.has(index):
+		_win_order.append(index)
+
 	SoundManager.play_victory()
 	DataStore.record_win(index)
+
 	var sub := _submarines[index]
 	sub.locked = true
 	sub.celebrating = true
-	# 停止所有加减分操作
-	for panel in _panels:
-		panel.set_buttons_enabled(false)
-	# 更新该玩家的胜场徽标
+
+	# 只禁用该玩家的 +/- 按钮，其余玩家照旧
+	_panels[index].set_buttons_enabled(false)
 	_panels[index].set_wins(DataStore.get_player_wins(index))
-	_show_winner(index)
+
+	_show_celebration(index)
+
+	# 只有全员都到达终点，本轮才算结束
+	if _all_players_finished():
+		_end_round()
 
 
-func _show_winner(index: int) -> void:
-	var overlay := ColorRect.new()
-	overlay.color = Color(0, 0, 0, 0)
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(overlay)
-	_overlay = overlay
+func _all_players_finished() -> bool:
+	for sub in _submarines:
+		if not sub.locked:
+			return false
+	return true
+
+
+## 本轮结束：弹出总结面板（含「再来一局」）。
+func _end_round() -> void:
+	_game_over = true
+	_show_final_overlay()
+	# 让庆祝层盖在总结面板之上
+	if _celebration and is_instance_valid(_celebration):
+		move_child(_celebration, get_child_count() - 1)
+
+
+# ——————————————————— 获胜庆祝（非阻塞）———————————————————
+
+## 画面正中显示奖杯 + 撒花，几秒后自动淡出；期间不影响其他玩家操作。
+func _show_celebration(index: int) -> void:
+	_clear_celebration()
+
+	var layer := Control.new()
+	layer.name = "Celebration"
+	layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.modulate.a = 0.0
+	add_child(layer)
+	_celebration = layer
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.06, 0.12, 0.28)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(dim)
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
+	layer.add_child(center)
 
-	# 大奖杯 + 结算卡片，竖排居中
+	# 大奖杯 + 获胜卡片，竖排居中
 	var column := VBoxContainer.new()
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_theme_constant_override("separation", 8)
+	column.add_theme_constant_override("separation", 6)
 	center.add_child(column)
 
 	var trophy: Control = Trophy.new()
@@ -591,58 +630,145 @@ func _show_winner(index: int) -> void:
 	var card := PanelContainer.new()
 	card.name = "Card"
 	card.add_theme_stylebox_override("panel", UiStyle.card_style(
-		Color(0.05, 0.14, 0.26, 0.98), _racer_color(index), 20, 3, 30
+		Color(0.05, 0.14, 0.26, 0.94), _racer_color(index), 20, 3, 26
 	))
 	column.add_child(card)
 
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 16)
+	vb.add_theme_constant_override("separation", 10)
 	card.add_child(vb)
 
 	var winner := Label.new()
 	winner.text = I18n.t("WIN_TITLE", [_names[index]])
 	winner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	winner.add_theme_font_size_override("font_size", 34)
+	winner.add_theme_font_size_override("font_size", 30)
 	winner.add_theme_color_override("font_color", _racer_color(index).lightened(0.4))
 	vb.add_child(winner)
 
 	var subtitle := Label.new()
 	subtitle.text = I18n.t("WIN_SUBTITLE", [_max_score, _max_score])
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 16)
+	subtitle.add_theme_font_size_override("font_size", 15)
 	subtitle.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0, 0.85))
 	vb.add_child(subtitle)
 
-	# 来自 JSON 存档的累计数据
 	var stats := Label.new()
 	stats.text = I18n.t("WIN_STATS", [DataStore.get_player_wins(index), DataStore.get_matches_played()])
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats.add_theme_font_size_override("font_size", 14)
+	stats.add_theme_font_size_override("font_size", 13)
 	stats.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45, 0.9))
 	vb.add_child(stats)
 
-	var restart := Button.new()
-	restart.text = I18n.t("BTN_PLAY_AGAIN")
-	restart.custom_minimum_size = Vector2(200, 50)
-	restart.add_theme_font_size_override("font_size", 20)
-	restart.pressed.connect(_on_restart_pressed)
-	vb.add_child(restart)
+	var rank := Label.new()
+	rank.text = I18n.t("WIN_RANK", [_win_order.find(index) + 1])
+	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rank.add_theme_font_size_override("font_size", 13)
+	rank.add_theme_color_override("font_color", Color(0.75, 0.88, 1.0, 0.8))
+	vb.add_child(rank)
 
 	# 撒花：最后加入 → 飘在卡片之上
 	var confetti: Node2D = Confetti.new()
 	confetti.name = "Confetti"
-	overlay.add_child(confetti)
+	layer.add_child(confetti)
 	confetti.start(CONFETTI_DURATION, CONFETTI_RATE)
 
-	# 淡入
+	# 整层不接收鼠标事件，保证其他玩家仍能点底部面板
+	_make_non_blocking(layer)
+
+	# 淡入 → 停留 → 淡出 → 自动销毁（tween 绑定在 layer 上，随其一起销毁）
+	var tween := layer.create_tween()
+	tween.tween_property(layer, "modulate:a", 1.0, CELEBRATION_FADE_IN)
+	tween.tween_interval(CELEBRATION_HOLD)
+	tween.tween_property(layer, "modulate:a", 0.0, CELEBRATION_FADE_OUT)
+	tween.tween_callback(_clear_celebration)
+
+
+func _clear_celebration() -> void:
+	if _celebration and is_instance_valid(_celebration):
+		_celebration.queue_free()
+	_celebration = null
+
+
+## 递归把整棵子树设为不接收鼠标事件（庆祝层不能挡住操作）。
+func _make_non_blocking(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_make_non_blocking(child)
+
+
+# ——————————————————— 本轮总结 ———————————————————
+
+func _show_final_overlay() -> void:
+	_clear_final_overlay()
+
+	var overlay := ColorRect.new()
+	overlay.name = "FinalOverlay"
+	overlay.color = Color(0, 0, 0, 0.55)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(overlay)
+	_final_overlay = overlay
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	var card := PanelContainer.new()
+	card.name = "Card"
+	card.add_theme_stylebox_override("panel", UiStyle.card_style(
+		Color(0.05, 0.14, 0.26, 0.98), Color(0.98, 0.80, 0.25), 20, 3, 30
+	))
+	center.add_child(card)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 12)
+	card.add_child(vb)
+
+	var title := Label.new()
+	title.text = I18n.t("ALL_FINISHED_TITLE")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color(1.0, 0.90, 0.55))
+	vb.add_child(title)
+
+	var body := Label.new()
+	body.text = I18n.t("ALL_FINISHED_BODY", [_racer_count])
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("font_size", 15)
+	body.add_theme_color_override("font_color", Color(0.82, 0.90, 1.0, 0.9))
+	vb.add_child(body)
+
+	for i in _win_order.size():
+		var who: int = _win_order[i]
+		var row := Label.new()
+		row.text = "%d.  %s" % [i + 1, _names[who]]
+		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_theme_font_size_override("font_size", 18)
+		row.add_theme_color_override("font_color", _racer_color(who).lightened(0.3))
+		vb.add_child(row)
+
+	var restart := Button.new()
+	restart.text = I18n.t("BTN_PLAY_AGAIN")
+	restart.custom_minimum_size = Vector2(220, 52)
+	restart.add_theme_font_size_override("font_size", 20)
+	UiStyle.filled_button(restart, Color(0.20, 0.60, 0.42))
+	restart.pressed.connect(_on_restart_pressed)
+	vb.add_child(restart)
+
 	var tween := create_tween()
 	tween.tween_property(overlay, "color:a", 0.55, 0.35)
 
 
+func _clear_final_overlay() -> void:
+	if _final_overlay and is_instance_valid(_final_overlay):
+		_final_overlay.queue_free()
+	_final_overlay = null
+
+
 func _on_restart_pressed() -> void:
-	if _overlay and is_instance_valid(_overlay):
-		_overlay.queue_free()
-	_overlay = null
+	_clear_final_overlay()
+	_clear_celebration()
 	_reset_game()
 
 
@@ -650,6 +776,7 @@ func _on_restart_pressed() -> void:
 func _reset_game() -> void:
 	_game_over = false
 	_winner_index = -1
+	_win_order.clear()
 	DataStore.reset_scores()
 	for i in _submarines.size():
 		var sub := _submarines[i]
