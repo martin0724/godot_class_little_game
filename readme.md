@@ -186,6 +186,10 @@ const STRINGS := {
 - **美术**：潜水艇、宠物、海洋动物、奖杯与背景均由代码矢量绘制，撒花也是自绘粒子，不依赖贴图资源。
 - **UI 样式**：按钮 / 卡片 / 确认框 / 内联可编辑文本框的统一样式集中在 `scripts/ui_style.gd`，
   用 `const UiStyle := preload("res://scripts/ui_style.gd")` 引入（不注册全局类，避免依赖编辑器类名缓存）。
+- **输入框失焦保存**：所有文本输入框在**失去焦点时**提交并写盘（`text_submitted` + `focus_exited`）。
+  为了让“点空白处”也能失焦，两个场景在 `_ready` 末尾调 `UiStyle.focus_on_click_recursive(self)`，
+  把非交互控件（容器 / 背景 / 根节点）的 `focus_mode` 设为 `FOCUS_CLICK`；
+  否则 Godot 不会把焦点从输入框移走（默认只有 `focus_mode != NONE` 的控件才会抢焦点）。
 - **音效**：由 `sound_manager.gd` 在运行时合成波形（`AudioStreamWAV`），不依赖音频文件；
   该脚本以自动加载（autoload）单例 `SoundManager` 形式注册，可直接全局调用。
   全局静音通过 `AudioServer.set_bus_mute()` 作用于 Master 总线。

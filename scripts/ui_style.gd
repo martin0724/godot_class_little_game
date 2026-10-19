@@ -63,6 +63,18 @@ static func filled_button(btn: Button, base: Color) -> void:
 	btn.add_theme_stylebox_override("disabled", disabled)
 
 
+## 递归处理整棵子树：把所有“非交互控件”（focus_mode 仍为 NONE 的容器 / 背景 / 根控件）
+## 设为点击即可获取焦点——这样正在编辑的输入框会失焦，触发 focus_exited 把数据存回去。
+## 按钮、输入框等已有焦点模式的控件不受影响。
+static func focus_on_click_recursive(node: Node) -> void:
+	if node is Control:
+		var control := node as Control
+		if control.focus_mode == Control.FOCUS_NONE:
+			control.focus_mode = Control.FOCUS_CLICK
+	for child in node.get_children():
+		focus_on_click_recursive(child)
+
+
 ## 内联可编辑文本框：平常看起来就像普通文字，聚焦时才显示底色与下划线。
 static func inline_line_edit(edit: LineEdit, accent := Color(0.45, 0.75, 1.0), font_size := 15) -> void:
 	edit.add_theme_font_size_override("font_size", font_size)

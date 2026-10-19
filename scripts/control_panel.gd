@@ -93,6 +93,9 @@ func _ready() -> void:
 	_plus_button.pressed.connect(_on_plus_pressed)
 	row.add_child(_plus_button)
 
+	# 点击面板任意空白处 / 其他控件时，让正在编辑的名称框失焦并提交
+	UiStyle.focus_on_click_recursive(self)
+
 
 func _make_button(text_value: String, color: Color) -> Button:
 	var b := Button.new()

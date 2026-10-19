@@ -38,6 +38,8 @@ func _ready() -> void:
 	_build_list()
 	_build_footer()
 	_refresh_list()
+	# 点击任意空白区域都能让正在编辑的输入框失焦并提交
+	UiStyle.focus_on_click_recursive(self)
 	queue_redraw()
 
 
@@ -273,9 +275,12 @@ func _refresh_list() -> void:
 		empty.add_theme_font_size_override("font_size", 15)
 		empty.add_theme_color_override("font_color", Color(0.75, 0.85, 0.95, 0.75))
 		_list_box.add_child(empty)
-		return
-	for i in slots.size():
-		_list_box.add_child(_make_slot_row(slots[i], i))
+	else:
+		for i in slots.size():
+			_list_box.add_child(_make_slot_row(slots[i], i))
+
+	# 新建的行也要能“点空白处失焦”
+	UiStyle.focus_on_click_recursive(_list_box)
 
 
 func _default_slot_name_for(index: int) -> String:

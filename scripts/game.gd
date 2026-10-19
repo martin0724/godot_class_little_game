@@ -85,6 +85,8 @@ func _ready() -> void:
 	_build_dashboard()
 	_build_hud()
 	set_process(true)
+	# 点击任意空白区域（海水背景 / 面板空隙）都能让正在编辑的输入框失焦并提交
+	UiStyle.focus_on_click_recursive(self)
 	queue_redraw()
 
 
