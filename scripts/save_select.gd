@@ -274,11 +274,15 @@ func _refresh_list() -> void:
 		empty.add_theme_color_override("font_color", Color(0.75, 0.85, 0.95, 0.75))
 		_list_box.add_child(empty)
 		return
-	for slot in slots:
-		_list_box.add_child(_make_slot_row(slot))
+	for i in slots.size():
+		_list_box.add_child(_make_slot_row(slots[i], i))
 
 
-func _make_slot_row(slot: Dictionary) -> Control:
+func _default_slot_name_for(index: int) -> String:
+	return I18n.t("SAVE_NAME_PLACEHOLDER", [index + 1])
+
+
+func _make_slot_row(slot: Dictionary, index: int) -> Control:
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", UiStyle.card_style(
 		Color(0.07, 0.16, 0.28, 0.95), Color(0.35, 0.60, 0.90, 0.45), 14, 2, 14
@@ -293,15 +297,25 @@ func _make_slot_row(slot: Dictionary) -> Control:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(info)
 
-	var slot_name := str(slot.get("name", ""))
-	if slot_name.is_empty():
-		slot_name = I18n.t("SAVE_NAME_PLACEHOLDER", [1])
+	var slot_id := str(slot["id"])
+	var stored_name := str(slot.get("name", ""))
+	var fallback_name := _default_slot_name_for(index)
+	var slot_name := stored_name if not stored_name.is_empty() else fallback_name
 
-	var name_label := Label.new()
-	name_label.text = slot_name
-	name_label.add_theme_font_size_override("font_size", 19)
-	name_label.add_theme_color_override("font_color", Color(0.95, 0.99, 1.0))
-	info.add_child(name_label)
+	# 可编辑的存档名称：回车或点击别处生效
+	var name_edit := LineEdit.new()
+	name_edit.name = "SaveName"
+	name_edit.text = slot_name
+	name_edit.max_length = DataStore.SLOT_NAME_MAX_LEN
+	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_edit.tooltip_text = I18n.t("RENAME_SAVE_HINT")
+	UiStyle.inline_line_edit(name_edit, Color(0.55, 0.85, 1.0), 19)
+	name_edit.set_meta("slot_id", slot_id)
+	name_edit.set_meta("stored_name", stored_name)
+	name_edit.set_meta("fallback", fallback_name)
+	name_edit.text_submitted.connect(_on_save_name_submitted.bind(name_edit))
+	name_edit.focus_exited.connect(_on_save_name_focus_exited.bind(name_edit))
+	info.add_child(name_edit)
 
 	var meta := Label.new()
 	meta.text = I18n.t("SLOT_META", [int(slot["player_count"]), int(slot["max_score"]), int(slot["matches_played"])])
@@ -334,6 +348,33 @@ func _make_slot_row(slot: Dictionary) -> Control:
 	row.add_child(del)
 
 	return card
+
+
+func _on_save_name_submitted(_new_text: String, edit: LineEdit) -> void:
+	_commit_save_name(edit)
+
+
+func _on_save_name_focus_exited(edit: LineEdit) -> void:
+	_commit_save_name(edit)
+
+
+## 提交存档改名：与默认名相同（或留空）则存为空串（“未命名”），并立即写盘。
+func _commit_save_name(edit: LineEdit) -> void:
+	if edit == null or not is_instance_valid(edit):
+		return
+	var slot_id := str(edit.get_meta("slot_id", ""))
+	if slot_id.is_empty():
+		return
+	var typed := edit.text.strip_edges()
+	var fallback := str(edit.get_meta("fallback", ""))
+	var stored := str(edit.get_meta("stored_name", ""))
+	# 与默认名相同时视为“未命名”，让它继续跟随语言
+	var to_store := "" if (typed.is_empty() or typed == fallback) else typed
+	if to_store != stored:
+		DataStore.rename_slot(slot_id, to_store)
+		edit.set_meta("stored_name", to_store)
+		SoundManager.play_click()
+	edit.text = typed if not typed.is_empty() else fallback
 
 
 func _on_enter_slot(id: String) -> void:

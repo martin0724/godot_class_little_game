@@ -66,6 +66,10 @@ const STRINGS := {
 		"zh": "存档 %d",
 		"en": "Save %d",
 	},
+	"RENAME_SAVE_HINT": {
+		"zh": "点击可修改存档名称",
+		"en": "Click to rename this save",
+	},
 	"PLAYER_COUNT_LABEL": {
 		"zh": "玩家数量",
 		"en": "Players",

@@ -63,6 +63,32 @@ static func filled_button(btn: Button, base: Color) -> void:
 	btn.add_theme_stylebox_override("disabled", disabled)
 
 
+## 内联可编辑文本框：平常看起来就像普通文字，聚焦时才显示底色与下划线。
+static func inline_line_edit(edit: LineEdit, accent := Color(0.45, 0.75, 1.0), font_size := 15) -> void:
+	edit.add_theme_font_size_override("font_size", font_size)
+	edit.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0))
+	edit.add_theme_color_override("font_placeholder_color", Color(0.70, 0.80, 0.90, 0.50))
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(1, 1, 1, 0.0)
+	normal.set_corner_radius_all(6)
+	normal.content_margin_left = 5
+	normal.content_margin_right = 5
+	normal.content_margin_top = 2
+	normal.content_margin_bottom = 2
+	edit.add_theme_stylebox_override("normal", normal)
+
+	var focus: StyleBoxFlat = normal.duplicate()
+	focus.bg_color = Color(1, 1, 1, 0.14)
+	focus.border_width_bottom = 2
+	focus.border_color = accent
+	edit.add_theme_stylebox_override("focus", focus)
+
+	var read_only: StyleBoxFlat = normal.duplicate()
+	read_only.bg_color = Color(1, 1, 1, 0.04)
+	edit.add_theme_stylebox_override("read_only", read_only)
+
+
 ## 卡片式面板样式。
 static func card_style(bg := Color(0.05, 0.13, 0.24, 0.96), border := Color(0.35, 0.60, 0.90, 0.50), radius := 18, border_width := 2, margin := 22) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()

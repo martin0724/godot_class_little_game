@@ -1,6 +1,8 @@
 extends PanelContainer
 class_name ControlPanel
-## 底部操作面板：玩家头像色块、名称、实时分数、+/- 按钮。
+## 底部操作面板：玩家头像色块、玩家名称、实时分数、+/- 按钮。
+
+const UiStyle := preload("res://scripts/ui_style.gd")
 
 signal score_requested(racer_index: int, delta: int)
 signal name_changed(racer_index: int, new_name: String)
@@ -53,24 +55,9 @@ func _ready() -> void:
 	_name_edit = LineEdit.new()
 	_name_edit.text = racer_name
 	_name_edit.placeholder_text = I18n.t("NAME_PLACEHOLDER")
-	_name_edit.max_length = 12
+	_name_edit.max_length = DataStore.PLAYER_NAME_MAX_LEN
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_name_edit.add_theme_font_size_override("font_size", 15)
-	_name_edit.add_theme_color_override("font_color", Color(0.93, 0.97, 1.0))
-	_name_edit.add_theme_color_override("font_placeholder_color", Color(0.7, 0.8, 0.9, 0.5))
-	var name_normal := StyleBoxFlat.new()
-	name_normal.bg_color = Color(1, 1, 1, 0.0)
-	name_normal.set_corner_radius_all(6)
-	name_normal.content_margin_left = 5
-	name_normal.content_margin_right = 5
-	name_normal.content_margin_top = 2
-	name_normal.content_margin_bottom = 2
-	_name_edit.add_theme_stylebox_override("normal", name_normal)
-	var name_focus: StyleBoxFlat = name_normal.duplicate()
-	name_focus.bg_color = Color(1, 1, 1, 0.14)
-	name_focus.border_width_bottom = 2
-	name_focus.border_color = racer_color
-	_name_edit.add_theme_stylebox_override("focus", name_focus)
+	UiStyle.inline_line_edit(_name_edit, racer_color, 15)
 	_name_edit.text_submitted.connect(_on_name_submitted)
 	_name_edit.focus_exited.connect(_on_name_focus_exited)
 	head.add_child(_name_edit)

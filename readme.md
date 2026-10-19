@@ -11,7 +11,7 @@
 
 ## 游戏玩法
 
-- **存档选择**：启动先进入**存档选择场景**，可新建存档（输入存档名称、玩家数量、终点分数）或从存档列表中选择已有存档进入游戏；每个存档的玩家数量（2–12）与终点分数（5–60）各自独立。
+- **存档选择**：启动先进入**存档选择场景**，可新建存档（输入存档名称、玩家数量、终点分数）或从存档列表中选择已有存档进入游戏；每个存档的玩家数量（2–12）与终点分数（5–60）各自独立。列表中的**存档名称可直接点击修改**（回车或点击别处生效，立即存入 JSON；留空或改成默认名则回退为「存档 N」并跟随语言）。
 - **垂直赛道**：画面自上而下分为蓝天/水面与深海，中间为 N 格垂直网格，水平方向排列与玩家数相同的航道。
 - **初始状态**：所有潜水艇位于水底（第 0 格），分数为 0。
 - **得分与上浮**：每获得 1 分向上浮 1 格；被扣分则下沉 1 格，最低沉至第 0 格（不会为负）。
@@ -142,7 +142,7 @@ class-little-game/
 
 - `settings` 是**应用级**配置（不随存档切换）；其余字段都是**存档槽**级。
 - 由自动加载单例 `DataStore`（`scripts/data_store.gd`）统一读写，接口分三组：
-  - 存档槽：`get_slot_summaries()` / `create_slot()` / `set_active_slot()` / `delete_slot()` /
+  - 存档槽：`get_slot_summaries()` / `create_slot()` / `rename_slot()` / `set_active_slot()` / `delete_slot()` /
     `get_active_slot_name()` / `get_active_player_count()` / `get_active_max_score()` / `reset_active_slot()` / `clear_all()`
   - 当前存档的玩家数据：`get_player_name()` / `set_player_name()` / `get_player_score()` /
     `set_player_score()` / `get_player_wins()` / `record_win()` / `reset_scores()`
@@ -184,7 +184,7 @@ const STRINGS := {
 - **缓存**：`.godot/` 与 `android/` 目录不纳入版本控制，克隆后由 Godot 自动重新生成。
 - **字体**：默认 UI 字体由 `theme/ui_font.tres`（SystemFont）提供，以保证中文正常显示。
 - **美术**：潜水艇、宠物、海洋动物、奖杯与背景均由代码矢量绘制，撒花也是自绘粒子，不依赖贴图资源。
-- **UI 样式**：按钮 / 卡片 / 确认框的统一样式集中在 `scripts/ui_style.gd`，
+- **UI 样式**：按钮 / 卡片 / 确认框 / 内联可编辑文本框的统一样式集中在 `scripts/ui_style.gd`，
   用 `const UiStyle := preload("res://scripts/ui_style.gd")` 引入（不注册全局类，避免依赖编辑器类名缓存）。
 - **音效**：由 `sound_manager.gd` 在运行时合成波形（`AudioStreamWAV`），不依赖音频文件；
   该脚本以自动加载（autoload）单例 `SoundManager` 形式注册，可直接全局调用。

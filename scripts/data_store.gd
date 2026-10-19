@@ -236,6 +236,23 @@ func has_slot(id: String) -> bool:
 	return not _find_slot(id).is_empty()
 
 
+## 修改存档名称（允许传空串表示“未命名”，由界面展示默认名）。
+func rename_slot(id: String, new_name: String) -> bool:
+	_ensure_loaded()
+	var slot := _find_slot(id)
+	if slot.is_empty():
+		return false
+	var clean := new_name.strip_edges()
+	if clean.length() > SLOT_NAME_MAX_LEN:
+		clean = clean.substr(0, SLOT_NAME_MAX_LEN)
+	if str(slot["name"]) == clean:
+		return true
+	slot["name"] = clean
+	_touch(slot)
+	save_data()
+	return true
+
+
 func delete_slot(id: String) -> bool:
 	_ensure_loaded()
 	var slots: Array = _data["slots"]
