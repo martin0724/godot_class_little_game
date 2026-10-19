@@ -18,6 +18,12 @@ const GRID_ZERO_Y := 595.0  ## 0 分（水底）时潜水艇中心 y
 const SIDE_MARGIN := 20.0
 const PANEL_MIN_W := 118.0  ## 单个玩家面板的最小宽度（超出则横向滚动）
 
+# —— FINISH 终点线（水面）：黑白格子旗终点带 ——
+const FINISH_CELL := 12.0            ## 格子边长（px）
+const FINISH_ROWS := 2               ## 格子行数（水面上下各一行，共 24px 高）
+const FINISH_COLOR_DARK := Color(0.07, 0.11, 0.18)   ## 深藏青：对天空对比度 ≈ 13.8:1
+const FINISH_COLOR_LIGHT := Color(0.99, 0.99, 1.0)   ## 近白：对海水对比度 ≈ 5.6:1
+
 const NAME_MAX_LEN := 12
 
 # —— 获胜庆祝（非阻塞，自动淡出，不打断其他玩家）——
@@ -194,13 +200,14 @@ func _build_world() -> void:
 
 	var finish := Label.new()
 	finish.text = I18n.t("FINISH_LINE")
-	finish.position = Vector2(VIEW_W * 0.5 - 100.0, SKY_H - 36.0)
+	# 停在格子带上方（格子带占据 SKY_H 上下各 12px）
+	finish.position = Vector2(VIEW_W * 0.5 - 100.0, SKY_H - FINISH_CELL * float(FINISH_ROWS) - 32.0)
 	finish.size = Vector2(200, 30)
 	finish.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	finish.add_theme_font_size_override("font_size", 22)
 	finish.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
-	finish.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
-	finish.add_theme_constant_override("outline_size", 4)
+	finish.add_theme_color_override("font_outline_color", Color(0.05, 0.09, 0.16, 0.85))
+	finish.add_theme_constant_override("outline_size", 6)
 	add_child(finish)
 	_finish_label = finish
 
@@ -821,5 +828,13 @@ func _draw() -> void:
 		var x := SIDE_MARGIN + lane_w * float(i)
 		draw_dashed_line(Vector2(x, SKY_H), Vector2(x, GRID_ZERO_Y + _grid_h() * 0.7), Color(1, 1, 1, 0.07), 1.0, 12.0)
 
-	# FINISH 终点线（水面）
-	draw_dashed_line(Vector2(0, SKY_H), Vector2(VIEW_W, SKY_H), Color(1, 1, 1, 0.95), 3.0, 16.0)
+	# FINISH 终点线（水面）：黑白格子旗终点带，水面上下各一行 12px 方格
+	var band_top := SKY_H - FINISH_CELL
+	var cols := int(ceil(VIEW_W / FINISH_CELL)) + 1
+	for row in FINISH_ROWS:
+		for col in cols:
+			var cell := FINISH_COLOR_DARK if (row + col) % 2 == 0 else FINISH_COLOR_LIGHT
+			draw_rect(Rect2(float(col) * FINISH_CELL, band_top + float(row) * FINISH_CELL, FINISH_CELL, FINISH_CELL), cell)
+	# 上下边缘各加 1px 描边：上边深色压亮天空、下边亮色压深海水，保证轮廓两侧都清晰
+	draw_rect(Rect2(0.0, band_top, VIEW_W, 1.0), FINISH_COLOR_DARK)
+	draw_rect(Rect2(0.0, band_top + FINISH_CELL * float(FINISH_ROWS) - 1.0, VIEW_W, 1.0), FINISH_COLOR_LIGHT)
