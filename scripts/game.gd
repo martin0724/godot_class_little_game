@@ -16,7 +16,9 @@ const SKY_H := 75.0       ## 天空 / 水面高度，同时也是 FINISH 终点�
 const PANEL_TOP := 620.0  ## 底部操作面板起始 y
 const GRID_ZERO_Y := 595.0  ## 0 分（水底）时潜水艇中心 y
 const SIDE_MARGIN := 20.0
-const PANEL_MIN_W := 118.0  ## 单个玩家面板的最小宽度（超出则横向滚动）
+const PANEL_MIN_W := 118.0  ## 单个玩家面板的最小宽度（宽裕时）
+const PANEL_MIN_NARROW_W := 88.0  ## 人数多时允许收缩到的下限（保证名称框仍可用）
+const PANEL_COMPACT_THRESHOLD := 118.0  ## ≤ 该宽度时启用紧凑样式（即除 9 人以下外都启用）
 
 # —— FINISH 终点线（水面）：黑白格子旗终点带 ——
 const FINISH_CELL := 12.0            ## 格子边长（px）
@@ -212,8 +214,19 @@ func _build_world() -> void:
 	_finish_label = finish
 
 
-## 底部操作面板：人数较多时自动出现横向滚动条。
+## 底部操作面板：面板最小宽度随人数动态收缩，人数 ≤ 12 时无需横向滚动。
+## 每格可用宽度 = (可用宽 - 间距) / 人数，下限 88px 保证名称框仍可用。
 func _build_dashboard() -> void:
+	var bar_gap := 8.0
+	# 每格宽度扣除 1px 像素取整余量：HBox 会把小数宽度向上取整，
+	# 否则 10 人时 116.8px × 10 会被取整成 1242px，反而顶出 8px 高的横向滚动条。
+	var min_w := clampf(
+		floor((VIEW_W - SIDE_MARGIN * 2.0 - bar_gap * float(maxi(0, _racer_count - 1))) / float(maxi(1, _racer_count))) - 1.0,
+		PANEL_MIN_NARROW_W,
+		PANEL_MIN_W
+	)
+	var compact := min_w < PANEL_COMPACT_THRESHOLD
+
 	var scroll := ScrollContainer.new()
 	scroll.position = Vector2(SIDE_MARGIN, PANEL_TOP + 12.0)
 	scroll.size = Vector2(VIEW_W - SIDE_MARGIN * 2.0, VIEW_H - PANEL_TOP - 24.0)
@@ -224,13 +237,13 @@ func _build_dashboard() -> void:
 	var bar := HBoxContainer.new()
 	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	bar.add_theme_constant_override("separation", 8)
+	bar.add_theme_constant_override("separation", int(bar_gap))
 	scroll.add_child(bar)
 
 	for i in _racer_count:
 		var panel := ControlPanel.new()
-		panel.setup(i, _racer_color(i), _names[i], _max_score)
-		panel.custom_minimum_size = Vector2(PANEL_MIN_W, 0)
+		panel.setup(i, _racer_color(i), _names[i], _max_score, compact)
+		panel.custom_minimum_size = Vector2(min_w, 0)
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		panel.score_requested.connect(_on_score_requested)
