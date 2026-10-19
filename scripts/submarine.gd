@@ -5,6 +5,13 @@ class_name Submarine
 const HULL_RX := 46.0  ## 艇身水平半径
 const HULL_RY := 21.0  ## 艇身垂直半径
 
+# —— 编号文字配色（方案 B：深色字 + 白描边）——
+# 艇身颜色由彩虹色相生成、明度固定，白字在浅黄 / 浅绿 / 青色艇身上会糊掉；
+# 改用深藏青字身，并在外面加一圈白描边，深色与浅色艇身都能保证轮廓清晰。
+const NUMBER_FONT_COLOR := Color(0.071, 0.125, 0.227)  # #12203A
+const NUMBER_OUTLINE_COLOR := Color(1, 1, 1, 0.95)
+const NUMBER_OUTLINE_SIZE := 2
+
 var number: int = 1
 var racer_color: Color = Color.WHITE
 var score: int = 0
@@ -42,9 +49,9 @@ func _ready() -> void:
 	_number_label.position = Vector2(-22, -14)
 	_number_label.size = Vector2(44, 28)
 	_number_label.add_theme_font_size_override("font_size", 20)
-	_number_label.add_theme_color_override("font_color", Color(1, 1, 1))
-	_number_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.65))
-	_number_label.add_theme_constant_override("outline_size", 4)
+	_number_label.add_theme_color_override("font_color", NUMBER_FONT_COLOR)
+	_number_label.add_theme_color_override("font_outline_color", NUMBER_OUTLINE_COLOR)
+	_number_label.add_theme_constant_override("outline_size", NUMBER_OUTLINE_SIZE)
 	add_child(_number_label)
 
 	# 头顶宠物装饰
