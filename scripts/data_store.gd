@@ -313,12 +313,17 @@ func get_active_max_score() -> int:
 	return int(slot.get("max_score", 20))
 
 
-## 清空当前存档的进度（名称、分数、胜场），保留存档本身的设置。
+## 清空当前存档的进度（分数 / 胜场 / 对局数），**保留玩家名称**与存档本身的设置。
 func reset_active_slot() -> void:
 	var slot := get_active_slot()
 	if slot.is_empty():
 		return
-	slot["players"] = _sanitize_players([], int(slot["player_count"]))
+	# 先沿用现有玩家列表（保留名称），再把分数与胜场清零
+	var players := _sanitize_players(slot["players"], int(slot["player_count"]))
+	for player in players:
+		player["score"] = 0
+		player["wins"] = 0
+	slot["players"] = players
 	slot["matches_played"] = 0
 	slot["last_winner"] = -1
 	_touch(slot)

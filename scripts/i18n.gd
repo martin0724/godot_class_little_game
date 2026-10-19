@@ -141,12 +141,12 @@ const STRINGS := {
 		"en": "Reset Current Save",
 	},
 	"RESET_SLOT_BODY": {
-		"zh": "将清空当前存档的玩家名称、分数与胜场。\n此操作不可撤销。",
-		"en": "Clears player names, scores and wins of the current save.\nThis cannot be undone.",
+		"zh": "将清空当前存档的分数与胜场，玩家名称会保留。\n此操作不可撤销。",
+		"en": "Clears scores and wins of the current save. Player names are kept.\nThis cannot be undone.",
 	},
 	"BTN_BACK_TO_SAVES": {
 		"zh": "存档",
-		"en": "Saves",
+		"en": "Save",
 	},
 	"BTN_SUMMON": {
 		"zh": "召唤",
