@@ -5,12 +5,18 @@ class_name Submarine
 const HULL_RX := 46.0  ## 艇身水平半径
 const HULL_RY := 21.0  ## 艇身垂直半径
 
-# —— 编号文字配色（方案 B：深色字 + 白描边）——
-# 艇身颜色由彩虹色相生成、明度固定，白字在浅黄 / 浅绿 / 青色艇身上会糊掉；
-# 改用深藏青字身，并在外面加一圈白描边，深色与浅色艇身都能保证轮廓清晰。
-const NUMBER_FONT_COLOR := Color(0.071, 0.125, 0.227)  # #12203A
-const NUMBER_OUTLINE_COLOR := Color(1, 1, 1, 0.95)
-const NUMBER_OUTLINE_SIZE := 2
+# —— 编号文字（位置：指挥塔上、艇身与潜望镜之间）——
+# 旧版编号压在舷窗上互相干扰；新版移到指挥塔顶部、潜望镜左侧的空档。
+# 潜望镜竖杆占 x:15..20，编号文字右缘必须控制在 x=+14 以内才不重叠。
+const NUMBER_CENTER := Vector2(-6.0, -26.0)  ## 编号文字区域中心（相对艇身中心）
+const NUMBER_FONT_SIZE := 16                 ## 编号字号
+const NUMBER_BOX_W := 36.0                   ## 编号文字区域宽度（x: -24..+12）
+const NUMBER_BOX_H := 22.0                   ## 编号文字区域高度
+
+# 编号配色：白色字 + 深色描边，在指挥塔的深色底上同样清晰
+const NUMBER_FONT_COLOR := Color(1, 1, 1, 0.98)
+const NUMBER_OUTLINE_COLOR := Color(0.04, 0.07, 0.13, 0.9)
+const NUMBER_OUTLINE_SIZE := 3
 
 var number: int = 1
 var racer_color: Color = Color.WHITE
@@ -46,9 +52,9 @@ func _ready() -> void:
 	_number_label.text = str(number)
 	_number_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_number_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_number_label.position = Vector2(-22, -14)
-	_number_label.size = Vector2(44, 28)
-	_number_label.add_theme_font_size_override("font_size", 20)
+	_number_label.position = NUMBER_CENTER - Vector2(NUMBER_BOX_W, NUMBER_BOX_H) * 0.5
+	_number_label.size = Vector2(NUMBER_BOX_W, NUMBER_BOX_H)
+	_number_label.add_theme_font_size_override("font_size", NUMBER_FONT_SIZE)
 	_number_label.add_theme_color_override("font_color", NUMBER_FONT_COLOR)
 	_number_label.add_theme_color_override("font_outline_color", NUMBER_OUTLINE_COLOR)
 	_number_label.add_theme_constant_override("outline_size", NUMBER_OUTLINE_SIZE)
